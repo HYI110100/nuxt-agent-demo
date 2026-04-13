@@ -14,7 +14,9 @@
     "katex": "^0.16.40",
     "markdown-it": "^14.1.1",
     "nuxt": "^3.10.3",
-    "pinia": "^2.1.7"
+    "openai": "^6.34.0",
+    "pinia": "^2.1.7",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@nuxtjs/eslint-module": "^4.1.0",

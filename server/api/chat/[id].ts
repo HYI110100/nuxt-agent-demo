@@ -11,10 +11,10 @@ import { createGaodeWeatherTool } from '~/server/llm/tools/gaodeWeather';
 export default defineEventHandler(async (event: H3Event) => {
 	// 读取请求体
 	const body = await readBody(event);
-	const { model, apiKey, baseURL, inputMessage } = body;
+	const { inputMessage } = body;
 	const chatId = getRouterParam(event, 'id') || '';
 	try {
-		if (!model || !apiKey || !baseURL || !inputMessage || !chatId) {
+		if (!inputMessage || !chatId) {
 			throw new Error('Missing required fields');
 		}
 		if (!chatsDB.has(chatId)) {
@@ -23,6 +23,9 @@ export default defineEventHandler(async (event: H3Event) => {
 			messagesDB.set(chatId, []);
 		}
 		const isStream = false;
+		const model = process.env.MODEL_NAME || '';
+		const apiKey = process.env.OPENAI_API_KEY || '';
+		const baseURL = process.env.OPENAI_BASE_URL || '';
 
 		const client = new openai({
 			apiKey,

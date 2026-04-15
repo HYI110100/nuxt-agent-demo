@@ -29,7 +29,18 @@ export class Actor {
             }
 
             try {
-                const result = await tool.execute(Object.values(decision.params || {}));
+                const requiredParams = tool.schema?.filter((param) => param.required)?.map((param) => param.name);
+                if (requiredParams?.length) {
+                    const missingParams = requiredParams.filter((param) => !decision.params?.[param]);
+                    if (missingParams.length) {
+                        return {
+                            type: 'error',
+                            message: `工具 ${tool.name} 缺少必填参数: ${missingParams.join(', ')}`,
+                            code: 'MISSING_REQUIRED_PARAMS',
+                        };
+                    }
+                }
+                const result = await tool.execute(decision.params || {});
                 return {
                     type: 'tool_result',
                     tool: decision.tool,

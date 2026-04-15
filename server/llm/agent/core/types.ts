@@ -113,7 +113,7 @@ export interface BaseTool {
     name: string;
     description?: string;
     schema?: ToolParameter[];
-    execute(...args: any[]): Promise<any>;
+    execute(...args: any): Promise<any>;
 }
 
 /** 工具定义（用于 createTool 工厂） */
@@ -121,7 +121,7 @@ export interface ToolDefinition {
     name: string;
     description?: string;
     schema?: ToolParameter[];
-    execute: (...args: any[]) => Promise<any>;
+    execute: (...args: any) => Promise<any>;
 }
 
 export type ToolDescription = {

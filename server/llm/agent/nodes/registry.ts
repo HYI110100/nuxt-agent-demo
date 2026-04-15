@@ -11,9 +11,11 @@ export class ToolRegistry {
         if (existing) {
             console.warn(`Tool "${tool.name}" already registered, overriding`);
         }
-        const t = { ...tool, id: uuidV4() };
-        this.tools.set(tool.name, t);
-        return t;
+        // 创建新对象但保留 execute 方法的引用
+        const t = Object.assign(Object.create(Object.getPrototypeOf(tool)), tool);
+        (t as Tool & { id?: string }).id = uuidV4();
+        this.tools.set(tool.name, t as Tool);
+        return t as Tool;
     }
 
     /** 获取工具 */

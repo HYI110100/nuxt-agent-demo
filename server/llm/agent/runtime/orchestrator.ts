@@ -1,4 +1,4 @@
-import type { InternalMessage, StreamEvent, ToolDescription } from '../core/types';
+import type { InternalMessage, StreamEvent } from '../core/types';
 import { Context } from './context';
 import type { Thinker } from '../nodes/thinker';
 import type { Actor } from '../nodes/actor';
@@ -42,25 +42,26 @@ export class Orchestrator {
 
         while (iterations < this.maxIterations) {
             iterations++;
-
+            console.log(iterations, '=========================================');
             try {
                 // 获取当前消息
                 const messages = this.context.getMessages();
-
                 // 决策
                 const decision = await this.thinker.decide(messages);
-
+                console.log("decision",decision);
                 // 处理决策
                 const result = await this.actor.process(decision);
-
+                console.log("result",result);
                 if (result.type === 'response') {
-                    return this.context.addMessage({
+                    // 清理上下文消息
+                    this.context.clear();
+                    return {
                         role: 'assistant',
                         content: {
                             type: 'response',
                             text: result.text,
                         },
-                    });
+                    }
                 }
 
                 if (result.type === 'tool_result') {
@@ -98,7 +99,8 @@ export class Orchestrator {
                 }
             }
         }
-
+        // 清理上下文消息
+        this.context.clear();
         // 超过最大迭代次数
         return {
             role: 'assistant',

@@ -29,7 +29,7 @@ export class Context {
 
     /** 获取所有消息（仅最近 maxMessages 条） */
     getMessages(): InternalMessage[] {
-        return this.messages.filter((msg) => msg.role !== 'tool').slice(-this.maxMessages);
+        return this.messages;
     }
 
     /** 设置上下文状态 */

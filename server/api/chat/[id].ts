@@ -1,7 +1,11 @@
 import openai from 'openai';
 import { H3Event, readBody } from 'h3';
 import { messagesDB, chatsDB } from '../../db/chat';
-import type { notStreamEvent } from '~/server/utils/agent/core/types';
+import type { notStreamEvent } from '../../llm/agent/core/types';
+import { Agent } from '../../llm/agent';
+import { createGaodeDistrictTool } from '~/server/llm/tools/gaodeDistrict';
+import { createGaodeWeatherTool } from '~/server/llm/tools/gaodeWeather';
+
 
 
 export default defineEventHandler(async (event: H3Event) => {
@@ -29,12 +33,13 @@ export default defineEventHandler(async (event: H3Event) => {
 			llmClient: {
 				sendRequest: (_agentMessage) => {
 					return new Promise<notStreamEvent>((resolve, reject) => {
+						const msg = (messagesDB.get(chatId) || []).map((msg) => ({
+							role: msg.role,
+							content: msg.content,
+						}))
 						client.chat.completions.create({
 							model: model,
-							messages: (messagesDB.get(chatId) || []).map((msg) => ({
-								role: msg.role,
-								content: msg.content,
-							})),
+							messages: [...msg, ..._agentMessage],
 							response_format: {
 								type: 'json_object',
 							},
@@ -54,7 +59,6 @@ export default defineEventHandler(async (event: H3Event) => {
 									})
 									return;
 								}
-
 								resolve({
 									type: 'response',
 									reasoning,
@@ -89,7 +93,9 @@ export default defineEventHandler(async (event: H3Event) => {
 				}
 			}
 		})
-
+		agent.addTool(createGaodeDistrictTool(process.env.GAODE_API_KEY || ''));
+		agent.addTool(createGaodeWeatherTool(process.env.GAODE_API_KEY || ''));
+		
 		if (!(messagesDB.get(chatId)?.length)) {
 			messagesDB.set(chatId, [{
 				role: 'system',
@@ -102,11 +108,10 @@ export default defineEventHandler(async (event: H3Event) => {
 			content: inputMessage,
 			timestamp: Date.now(),
 		}]);
+		if (isStream) {
 
-		if (!isStream) {
+		} else {
 			const response = await agent.chat(inputMessage);
-			// console.log("messages list", messagesDB.get(chatId));
-			// console.log("response", response);
 			// 设置SSE响应头
 			event.node.res.writeHead(200, {
 				'Content-Type': 'application/json',

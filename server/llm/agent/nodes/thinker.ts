@@ -19,10 +19,8 @@ export class Thinker {
     async decide(messages: InternalMessage[]): Promise<Decision> {
         // InternalMessage → ExternalMessage 转换
         const externalMessage = this.toInternalMessages(messages);
-
         // 调用 LLM
         const response = await this.llmClient.sendRequest(externalMessage);
-        
         // 解析决策
         return this.parseDecision(response);
     }

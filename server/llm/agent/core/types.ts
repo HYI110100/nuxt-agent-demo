@@ -82,10 +82,10 @@ export type notStreamEvent =
  */
 export interface LLMClient {
     /** 非流式请求 - 返回 LLM 原始响应文本 */
-    sendRequest(messages: ExternalMessage[]): Promise<notStreamEvent>;
+    sendRequest(messages: any[]): Promise<notStreamEvent>;
 
     /** 流式请求 - onChunk 传递原始文本片段 */
-    sendStreamRequest(messages: ExternalMessage[], onChunk: (textFragment: StreamEvent) => void): Promise<void>;
+    sendStreamRequest(messages: any[], onChunk: (textFragment: StreamEvent) => void): Promise<void>;
 }
 export type OnLoopEvent = (event: ContextMessage, contextId: string | null) => void | Promise<void>;
 /** Agent 配置接口 */
@@ -94,6 +94,7 @@ export interface AgentConfig {
     maxContext?: number;        // 最大上下文消息数，默认 10
     maxIterations?: number;     // 单次最大 loop 次数，默认 3
     systemPrompt?: string;      // 系统提示词
+    getMessages?: () => any[];  // 获取当前上下文消息的回调
     onLoopEvent?: OnLoopEvent;  // 每次循环步骤的回调
 }
 

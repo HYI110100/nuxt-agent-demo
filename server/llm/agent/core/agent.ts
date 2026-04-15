@@ -29,6 +29,7 @@ class Agent {
             thinker: this.thinker,
             actor: this.actor,
             context: this.context,
+            getMessages: config.getMessages ?? (() => this.context.getMessages()),
         });
     }
 

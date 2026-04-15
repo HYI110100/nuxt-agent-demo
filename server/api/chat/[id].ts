@@ -33,11 +33,11 @@ export default defineEventHandler(async (event: H3Event) => {
 
 		const agent = new Agent({
 			llmClient: {
-				sendRequest: (agentMessage) => {
+				sendRequest: (messages) => {
 					return new Promise<notStreamEvent>((resolve, reject) => {
 						client.chat.completions.create({
 							model: model,
-							messages: messageToOpenaiMessage(messagesDB.get(chatId) || []),
+							messages,
 							response_format: {
 								type: 'json_object',
 							},
@@ -83,7 +83,7 @@ export default defineEventHandler(async (event: H3Event) => {
 						});
 					})
 				},
-				sendStreamRequest: (_agentMessage, onChunk) => {
+				sendStreamRequest: (_messages, onChunk) => {
 					return new Promise<void>((resolve, reject) => {
 						// TODO: 实现流式请求逻辑
 					})
@@ -154,6 +154,8 @@ export default defineEventHandler(async (event: H3Event) => {
 					})
 				}
 			},
+			getMessages: () =>  messageToOpenaiMessage(messagesDB.get(chatId) || []),
+
 		})
 		agent.addTool(createGaodeDistrictTool(process.env.GAODE_API_KEY || ''));
 		agent.addTool(createGaodeWeatherTool(process.env.GAODE_API_KEY || ''));

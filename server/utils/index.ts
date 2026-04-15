@@ -34,7 +34,7 @@ export function buildSystemPrompt(options: { toolList: ToolDescription[] }) {
 ## 工具列表
 ${buildToolParameters(options.toolList)}
 
-## 响应规则 - **所有响应都必须是 JSON 格式（不要包含 markdown 代码块标记）**
+## 响应规则 - **所有响应都必须是 JSON 对象格式（不要包含 markdown 代码块标记）**
 1. **不需要工具时**：返回 {"type": "response", "text": "文本回复"}
 2. **需要工具时**：：
    {"type": "tool_call", "tool": "工具名", "params": {"参数": "值(必填/可选)"}}

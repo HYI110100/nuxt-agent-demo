@@ -1,4 +1,4 @@
-import type { InternalMessage, StreamEvent } from './types';
+import type { StreamEvent } from './types';
 import { Context, type ContextMessage } from '../nodes/context';
 import type { Thinker } from '../nodes/thinker';
 import type { Actor } from '../nodes/actor';
@@ -15,6 +15,7 @@ export class Orchestrator {
     // private toolRegistry: ToolRegistry;
     private context: Context;
     private maxIterations: number;
+    private getMessages: () => any[];
 
     constructor(config: {
         maxIterations: number;
@@ -22,11 +23,13 @@ export class Orchestrator {
         actor: Actor;
         // toolRegistry: ToolRegistry;
         context: Context;
+        getMessages: () => any[];
     }) {
         this.thinker = config.thinker;
         this.actor = config.actor;
         // this.toolRegistry = config.toolRegistry;
         this.context = config.context;
+        this.getMessages = config.getMessages;
         this.maxIterations = config.maxIterations;
     }
 
@@ -46,7 +49,6 @@ export class Orchestrator {
         });
         
         let iterations = 0;
-        let specNumber = 0;
         let taskId = '';
 
         while (iterations < this.maxIterations) {
@@ -54,7 +56,7 @@ export class Orchestrator {
             // console.log(iterations, '=========================================');
             try {
                 // 获取当前消息
-                const messages = this.context.getMessages();
+                const messages = this.getMessages();
                 // 决策
                 const decision = await this.thinker.decide(messages);
                 // console.log("decision",decision);

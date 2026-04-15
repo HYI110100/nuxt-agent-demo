@@ -1,29 +1,38 @@
-import type { InternalMessage, Role } from '../core/types';
+import type { InternalMessage, OnLoopEvent } from '../core/types';
+import { v4 as uuidV4 } from 'uuid';
 
 /** 上下文状态 */
 type ContextState = 'idle' | 'thinking' | 'acting';
-
+export type ContextMessage = InternalMessage & { timestamp: number, id: string }
 /**
  * 上下文管理类
  * 管理消息历史和状态
  */
 export class Context {
-    private messages: (InternalMessage & { timestamp: number })[] = [];
+    private messages: ContextMessage[] = [];
     private state: ContextState = 'idle';
+    private id: string | null = null;
     private currentDecision: any = null;
-    private readonly maxMessages: number;
+    // private readonly maxMessages: number;
+    private onLoopEvent?: OnLoopEvent;
 
-    constructor(maxMessages: number = 10) {
-        this.maxMessages = maxMessages;
+    constructor({ maxMessages = 10, onLoopEvent }: { maxMessages?: number; onLoopEvent?: OnLoopEvent }) {
+        // this.maxMessages = maxMessages;
+        this.onLoopEvent = onLoopEvent;
+        this.id = uuidV4();
     }
 
     /** 添加消息 */
     addMessage(message: InternalMessage) {
         const newData = {
+            id: uuidV4(),
             ...message,
             timestamp: Date.now(),
         }
         this.messages.push(newData);
+        if (this.onLoopEvent) {
+            this.onLoopEvent(newData, this.id);
+        }
         return newData;
     }
 
@@ -56,6 +65,7 @@ export class Context {
     clear() {
         this.messages = [];
         this.state = 'idle';
+        this.id = null
         this.currentDecision = null;
     }
 }

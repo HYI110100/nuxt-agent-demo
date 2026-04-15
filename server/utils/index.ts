@@ -1,3 +1,4 @@
+import type { ChatMessage } from "../db/chat";
 import type { ToolDescription } from "../llm/agent/core/types";
 
 function buildToolParameters(tools: ToolDescription[]): string {
@@ -44,4 +45,33 @@ ${buildToolParameters(options.toolList)}
 - 用户："查询北京市行政区划" → 你：{"type": "tool_call", "tool": "gaode_district", "params": {"keywords": "北京"}}
 - 用户："上海天气" → 你：{"type": "tool_call", "tool": "gaode_weather", "params": {"city": "上海"}}
 `
+}
+
+export function messageToOpenaiMessage(chatMessages: ChatMessage[]) {
+    const result: { role: 'user' | 'assistant' | 'system'; content: string }[] = [];
+
+    for (const msg of chatMessages) {
+        switch (msg.event.type) {
+            case 'content':
+                result.push({
+                    role: msg.role,
+                    content: msg.event.content
+                });
+                break;
+            case 'tool_call':
+                result.push({
+                    role: 'assistant',
+                    content: `[工具调用] ${msg.event.toolName}: ${msg.event.content}`
+                });
+                break;
+            case 'tool_result':
+                result.push({
+                    role: 'assistant',
+                    content: `[工具返回] ${msg.event.toolName}: ${msg.event.content}`
+                });
+                break;
+        }
+    }
+
+    return result;
 }

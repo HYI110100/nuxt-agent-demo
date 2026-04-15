@@ -1,12 +1,11 @@
+import type { ContextMessage } from "../runtime/context";
+
 export type Role = 'system' | 'user' | 'assistant' | 'tool';
 
-export type MessageThought = {
-    type: 'response'
-    text: string;
-}
 export type MessageResponse = {
     type: 'response'
     text: string;
+    reasoning?: string;
 }
 export type MessageQuestion = {
     type: 'question'
@@ -15,12 +14,16 @@ export type MessageQuestion = {
 export type MessageToolResult = {
     type: 'tool_result';
     tool: string;
-    result: any;
+    result: string;
+    taskId: string;
+    reasoning?: string;
 }
 export type MessageToolCall = {
     type: 'tool_call';
     tool: string;
     params: Record<string, any>;
+    taskId: string;
+    reasoning?: string;
 }
 export type MessageError = {
     type: 'error';
@@ -28,7 +31,7 @@ export type MessageError = {
     message?: string;
 }
 export type Result = MessageResponse | MessageToolResult | MessageError
-export type Decision = MessageResponse | MessageToolCall | MessageError
+export type Decision = MessageResponse | Omit<MessageToolCall, 'taskId'> | MessageError
 
 /**
  * Agent标准消息格式
@@ -36,7 +39,7 @@ export type Decision = MessageResponse | MessageToolCall | MessageError
  */
 export type InternalMessage = {
     role: 'assistant';
-    content: MessageThought | MessageResponse | MessageError
+    content: MessageResponse | MessageError
 } | {
     role: 'user';
     content: MessageQuestion | MessageError
@@ -84,13 +87,14 @@ export interface LLMClient {
     /** 流式请求 - onChunk 传递原始文本片段 */
     sendStreamRequest(messages: ExternalMessage[], onChunk: (textFragment: StreamEvent) => void): Promise<void>;
 }
-
+export type OnLoopEvent = (event: ContextMessage, contextId: string | null) => void | Promise<void>;
 /** Agent 配置接口 */
 export interface AgentConfig {
     llmClient: LLMClient;
     maxContext?: number;        // 最大上下文消息数，默认 10
     maxIterations?: number;     // 单次最大 loop 次数，默认 3
     systemPrompt?: string;      // 系统提示词
+    onLoopEvent?: OnLoopEvent;  // 每次循环步骤的回调
 }
 
 type ToolType = 'string' | 'number' | 'boolean' | 'object' | 'array';

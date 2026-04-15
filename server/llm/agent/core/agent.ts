@@ -22,13 +22,12 @@ class Agent {
         this.thinker = new Thinker(config.llmClient);
         this.toolRegistry = new ToolRegistry();
         this.actor = new Actor(this.toolRegistry);
-        this.context = new Context(config.maxContext ?? 10);
+        this.context = new Context({ maxMessages: config.maxContext ?? 10, onLoopEvent: config.onLoopEvent });
 
         this.orchestrator = new Orchestrator({
             maxIterations: config.maxIterations ?? 3,
             thinker: this.thinker,
             actor: this.actor,
-            toolRegistry: this.toolRegistry,
             context: this.context,
         });
     }

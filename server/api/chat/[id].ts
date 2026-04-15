@@ -5,23 +5,22 @@ import type { notStreamEvent } from '../../llm/agent/core/types';
 import { Agent } from '../../llm/agent';
 import { createGaodeDistrictTool } from '~/server/llm/tools/gaodeDistrict';
 import { createGaodeWeatherTool } from '~/server/llm/tools/gaodeWeather';
-
-
+import { messageToOpenaiMessage } from '~/server/utils';
+import { v4 as uuidV4 } from 'uuid';
 
 export default defineEventHandler(async (event: H3Event) => {
-	// 读取请求体
 	const body = await readBody(event);
-	const { inputMessage } = body;
+	const { input } = body;
 	const chatId = getRouterParam(event, 'id') || '';
 	try {
-		if (!inputMessage || !chatId) {
+		if (!input || !chatId) {
 			throw new Error('Missing required fields');
 		}
 		if (!chatsDB.has(chatId)) {
-			//   throw new Error('Chat not found');
 			chatsDB.set(chatId, { id: chatId, title: '测试对话' });
 			messagesDB.set(chatId, []);
 		}
+
 		const isStream = false;
 		const model = process.env.MODEL_NAME || '';
 		const apiKey = process.env.OPENAI_API_KEY || '';
@@ -34,15 +33,11 @@ export default defineEventHandler(async (event: H3Event) => {
 
 		const agent = new Agent({
 			llmClient: {
-				sendRequest: (_agentMessage) => {
+				sendRequest: (agentMessage) => {
 					return new Promise<notStreamEvent>((resolve, reject) => {
-						const msg = (messagesDB.get(chatId) || []).map((msg) => ({
-							role: msg.role,
-							content: msg.content,
-						}))
 						client.chat.completions.create({
 							model: model,
-							messages: [...msg, ..._agentMessage],
+							messages: messageToOpenaiMessage(messagesDB.get(chatId) || []),
 							response_format: {
 								type: 'json_object',
 							},
@@ -50,7 +45,6 @@ export default defineEventHandler(async (event: H3Event) => {
 							const reasoning = response.choices?.[0]?.message?.reasoning_content || ''
 							try {
 								const contentJSON = JSON.parse(response.choices?.[0]?.message?.content || '{}');
-								// 要求大模型调用工具返回type设置为tool_call
 								if (contentJSON.type === 'tool_call') {
 									resolve({
 										type: 'tool_call',
@@ -94,35 +88,99 @@ export default defineEventHandler(async (event: H3Event) => {
 						// TODO: 实现流式请求逻辑
 					})
 				}
-			}
+			},
+			onLoopEvent: async (event, contextId) => {
+				if (!contextId) {
+					console.error('ContextId is empty');
+					return
+				}
+				if (event.role === 'user') {
+					messagesDB.get(chatId)?.push({
+						id: event.id,
+						role: 'user',
+						event: {
+							type: 'content',
+							content: event.content.type === 'question' ? event.content.text : `Error: message ${event.content.message}, code ${event.content.code}.`,
+						},
+						timestamp: Date.now(),
+					})
+				}
+				if (event.role === 'assistant') {
+					messagesDB.get(chatId)?.push({
+						id: event.id,
+						parentId: contextId,
+						role: 'assistant',
+						event: {
+							type: 'content',
+							content: event.content.type === 'response' ? event.content.text : `Error: message ${event.content.message}, code ${event.content.code}.`,
+							reasoning: event.content.type === 'response' ? event.content.reasoning : '',
+						},
+						timestamp: Date.now(),
+					})
+				}
+				if (event.role === 'tool') {
+					let eventContent: any
+					if (event.content.type === 'tool_call') {
+						eventContent = {
+							type: 'tool_call',
+							toolName: event.content.tool,
+							content: JSON.stringify(event.content.params || {}),
+							reasoning: event.content.reasoning,
+							taskId: event.content.taskId,
+						}
+					} else if (event.content.type === 'tool_result') {
+						eventContent = {
+							type: 'tool_result',
+							toolName: event.content.tool,
+							content: event.content.result,
+							reasoning: event.content.reasoning,
+							taskId: event.content.taskId,
+						}
+					} else if (event.content.type === 'error') {
+						eventContent = {
+							type: 'error',
+							message: `Error: message ${event.content.message}, code ${event.content.code}.`,
+						}
+					}
+					if (!eventContent) {
+						return
+					}
+					messagesDB.get(chatId)?.push({
+						id: event.id,
+						parentId: contextId,
+						role: 'assistant',
+						event: eventContent,
+						timestamp: Date.now(),
+					})
+				}
+			},
 		})
 		agent.addTool(createGaodeDistrictTool(process.env.GAODE_API_KEY || ''));
 		agent.addTool(createGaodeWeatherTool(process.env.GAODE_API_KEY || ''));
-		
+
 		if (!(messagesDB.get(chatId)?.length)) {
 			messagesDB.set(chatId, [{
+				id: uuidV4(),
 				role: 'system',
-				content: buildSystemPrompt({ toolList: agent.getToolsDescription() }),
+				event: {
+					type: 'content',
+					content: buildSystemPrompt({ toolList: agent.getToolsDescription() }),
+				},
 				timestamp: Date.now(),
 			}]);
 		}
-		messagesDB.set(chatId, [...messagesDB.get(chatId) || [], {
-			role: 'user',
-			content: inputMessage,
-			timestamp: Date.now(),
-		}]);
-		if (isStream) {
 
+		if (isStream) {
+			// TODO: 实现流式请求逻辑
 		} else {
-			const response = await agent.chat(inputMessage);
-			// 设置SSE响应头
+			const result = await agent.chat(input);
 			event.node.res.writeHead(200, {
 				'Content-Type': 'application/json',
 				'Cache-Control': 'no-cache',
 				'Connection': 'keep-alive',
-				'Access-Control-Allow-Origin': '*' // 如需跨域
+				'Access-Control-Allow-Origin': '*'
 			});
-			event.node.res.write(JSON.stringify(response));
+			event.node.res.write(JSON.stringify(result));
 			event.node.res.end();
 			return;
 		}
@@ -130,7 +188,7 @@ export default defineEventHandler(async (event: H3Event) => {
 		if (event.node.res.headersSent) {
 
 		} else {
-			throw error // 让 Nuxt 处理正常 HTTP 错误
+			throw error
 		}
 	}
 });

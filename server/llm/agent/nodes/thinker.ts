@@ -21,6 +21,7 @@ export class Thinker {
         const externalMessage = this.toInternalMessages(messages);
         // 调用 LLM
         const response = await this.llmClient.sendRequest(externalMessage);
+        // console.log(response);
         // 解析决策
         return this.parseDecision(response);
     }
@@ -65,6 +66,7 @@ export class Thinker {
                 return {
                     type: "response",
                     text: parsed.response,
+                    reasoning: parsed.reasoning,
                 }
             }
             if (parsed.type === 'tool_call') {
@@ -72,6 +74,7 @@ export class Thinker {
                     type: "tool_call",
                     tool: parsed.response.tool,
                     params: parsed.response.params,
+                    reasoning: parsed.reasoning,
                 }
             }
             if (parsed.type === 'error') {

@@ -1,8 +1,8 @@
 import type { AgentConfig, InternalMessage, StreamEvent } from './types';
 import { Thinker } from '../nodes/thinker';
 import { Actor } from '../nodes/actor';
-import { Context } from '../runtime/context';
-import { Orchestrator } from '../runtime/orchestrator';
+import { Context } from '../nodes/context';
+import { Orchestrator } from './orchestrator';
 import { ToolRegistry } from '../nodes/registry';
 import type { BaseTool } from './types';
 

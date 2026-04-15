@@ -1,5 +1,5 @@
-import type { InternalMessage, StreamEvent } from '../core/types';
-import { Context, type ContextMessage } from './context';
+import type { InternalMessage, StreamEvent } from './types';
+import { Context, type ContextMessage } from '../nodes/context';
 import type { Thinker } from '../nodes/thinker';
 import type { Actor } from '../nodes/actor';
 import { v4 as uuidV4 } from 'uuid';

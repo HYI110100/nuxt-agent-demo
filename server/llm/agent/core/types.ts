@@ -1,4 +1,4 @@
-import type { ContextMessage } from "../runtime/context";
+import type { ContextMessage } from "../nodes/context";
 
 export type Role = 'system' | 'user' | 'assistant' | 'tool';
 

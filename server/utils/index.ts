@@ -1,4 +1,4 @@
-import type { ChatMessage } from "../db/chat";
+import type { Message, ToolCall } from "../db/chat";
 import type { ToolDescription } from "../llm/agent/core/types";
 
 function buildToolParameters(tools: ToolDescription[]): string {
@@ -47,29 +47,77 @@ ${buildToolParameters(options.toolList)}
 `
 }
 
-export function messageToOpenaiMessage(chatMessages: ChatMessage[]) {
+export function messageToOpenaiMessage(
+  messages: Message[],
+  toolCalls?: ToolCall[]
+): { role: 'user' | 'assistant' | 'system'; content: string }[] {
     const result: { role: 'user' | 'assistant' | 'system'; content: string }[] = [];
 
-    for (const msg of chatMessages) {
-        switch (msg.event.type) {
-            case 'content':
+    // 如果没有工具调用，直接转换消息
+    if (!toolCalls || toolCalls.length === 0) {
+        for (const msg of messages) {
+            if (msg.content) {
                 result.push({
                     role: msg.role,
-                    content: msg.event.content
+                    content: msg.content
                 });
-                break;
-            case 'tool_call':
+            }
+        }
+        return result;
+    }
+
+    // 创建工具调用映射，方便快速查找
+    const toolMap = new Map<string, ToolCall>();
+    for (const tc of toolCalls) {
+        toolMap.set(tc.id, tc);
+    }
+
+    // 合并消息和工具调用，按时间排序
+    const allEvents: Array<{ timestamp: number; type: 'message' | 'tool_call'; data: Message | ToolCall }> = [];
+
+    for (const msg of messages) {
+        allEvents.push({ timestamp: msg.timestamp, type: 'message', data: msg });
+    }
+
+    for (const tc of toolCalls) {
+        allEvents.push({ timestamp: tc.timestamp, type: 'tool_call', data: tc });
+    }
+
+    // 按时间戳排序
+    allEvents.sort((a, b) => a.timestamp - b.timestamp);
+
+    // 遍历生成 OpenAI 格式消息
+    for (const event of allEvents) {
+        if (event.type === 'message') {
+            const msg = event.data as Message;
+            if (msg.content) {
+                result.push({
+                    role: msg.role,
+                    content: msg.content
+                });
+            }
+        } else {
+            const tc = event.data as ToolCall;
+            if (tc.status === 'completed' && tc.result) {
+                // 工具执行完成，包含真实结果
                 result.push({
                     role: 'assistant',
-                    content: `[工具调用] ${msg.event.toolName}: ${msg.event.content}`
+                    content: `[工具返回] ${tc.toolName}: ${tc.result}`
                 });
-                break;
-            case 'tool_result':
+            } else if (tc.status === 'pending') {
+                // 工具调用中，显示参数
+                const paramsStr = JSON.stringify(tc.params);
                 result.push({
                     role: 'assistant',
-                    content: `[工具返回] ${msg.event.toolName}: ${msg.event.content}`
+                    content: `[工具调用] ${tc.toolName}: ${paramsStr}`
                 });
-                break;
+            } else if (tc.status === 'error') {
+                // 工具执行错误
+                result.push({
+                    role: 'assistant',
+                    content: `[工具错误] ${tc.toolName}: 执行失败`
+                });
+            }
         }
     }
 

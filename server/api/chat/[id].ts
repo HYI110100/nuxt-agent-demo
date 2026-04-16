@@ -1,12 +1,14 @@
 import openai from 'openai';
 import { H3Event, readBody } from 'h3';
-import { messagesDB, chatsDB } from '../../db/chat';
+import { messagesDB, chatsDB, toolCallsDB } from '../../db/chat';
+import type { Message, ToolCall } from '../../db/chat';
 import type { notStreamEvent } from '../../llm/agent/core/types';
 import { Agent } from '../../llm/agent';
-import { createGaodeDistrictTool } from '~/server/llm/tools/gaodeDistrict';
-import { createGaodeWeatherTool } from '~/server/llm/tools/gaodeWeather';
-import { messageToOpenaiMessage } from '~/server/utils';
+import { gaodeDistrictTool } from '~/server/llm/tools/gaodeDistrict';
+import { gaodeWeatherTool } from '~/server/llm/tools/gaodeWeather';
+import { messageToOpenaiMessage, buildSystemPrompt } from '~/server/utils';
 import { v4 as uuidV4 } from 'uuid';
+import { sendRequest, sendStreamRequest } from '~/server/llm/llmClient';
 
 export default defineEventHandler(async (event: H3Event) => {
 	const body = await readBody(event);
@@ -17,171 +19,133 @@ export default defineEventHandler(async (event: H3Event) => {
 			throw new Error('Missing required fields');
 		}
 		if (!chatsDB.has(chatId)) {
-			chatsDB.set(chatId, { id: chatId, title: '测试对话' });
+			throw new Error(`Chat ${chatId} not found`);
+		}
+
+		// 初始化新的消息表和工具调用表（如果不存在）
+		if (!messagesDB.has(chatId)) {
 			messagesDB.set(chatId, []);
+		}
+		if (!toolCallsDB.has(chatId)) {
+			toolCallsDB.set(chatId, []);
 		}
 
 		const isStream = false;
-		const model = process.env.MODEL_NAME || '';
-		const apiKey = process.env.OPENAI_API_KEY || '';
-		const baseURL = process.env.OPENAI_BASE_URL || '';
-
-		const client = new openai({
-			apiKey,
-			baseURL,
-		});
+		const messagesId = uuidV4();
 
 		const agent = new Agent({
-			llmClient: {
-				sendRequest: (messages) => {
-					return new Promise<notStreamEvent>((resolve, reject) => {
-						client.chat.completions.create({
-							model: model,
-							messages,
-							response_format: {
-								type: 'json_object',
-							},
-						}).then((response: any) => {
-							const reasoning = response.choices?.[0]?.message?.reasoning_content || ''
-							try {
-								const contentJSON = JSON.parse(response.choices?.[0]?.message?.content || '{}');
-								if (contentJSON.type === 'tool_call') {
-									resolve({
-										type: 'tool_call',
-										reasoning,
-										response: {
-											tool: contentJSON.tool || '',
-											params: contentJSON.params || {},
-										},
-									})
-									return;
-								}
-								resolve({
-									type: 'response',
-									reasoning,
-									response: contentJSON?.text || '',
-								})
-							} catch (error) {
-								reject({
-									type: 'error',
-									reasoning,
-									response: {
-										code: 'JSON_PARSE_ERROR',
-										message: 'Failed to parse JSON response',
-									},
-								});
-							}
-						}).catch((err) => {
-							reject({
-								type: 'error',
-								reasoning: '',
-								response: {
-									code: 'OPENAI_ERROR',
-									message: err.message,
-								},
-							});
-						});
-					})
-				},
-				sendStreamRequest: (_messages, onChunk) => {
-					return new Promise<void>((resolve, reject) => {
-						// TODO: 实现流式请求逻辑
-					})
-				}
-			},
-			onLoopEvent: async (event, contextId) => {
-				if (!contextId) {
-					console.error('ContextId is empty');
-					return
-				}
-				if (event.role === 'user') {
-					messagesDB.get(chatId)?.push({
-						id: event.id,
+			llmClient: { sendRequest, sendStreamRequest },
+			onLoopEvent: async (e) => {
+				// 处理用户消息
+				if (e.role === 'user') {
+					const userMessage: Message = {
+						id: e.id,
+						messageId: messagesId,
+						sessionId: chatId,
 						role: 'user',
-						event: {
-							type: 'content',
-							content: event.content.type === 'question' ? event.content.text : `Error: message ${event.content.message}, code ${event.content.code}.`,
-						},
+						content: e.content.type === 'question' ? e.content.text : `Error: ${e.content.message}`,
+						toolCallIds: [],
 						timestamp: Date.now(),
-					})
+					};
+					messagesDB.get(chatId)?.push(userMessage);
+					return;
 				}
-				if (event.role === 'assistant') {
-					messagesDB.get(chatId)?.push({
-						id: event.id,
-						parentId: contextId,
-						role: 'assistant',
-						event: {
-							type: 'content',
-							content: event.content.type === 'response' ? event.content.text : `Error: message ${event.content.message}, code ${event.content.code}.`,
-							reasoning: event.content.type === 'response' ? event.content.reasoning : '',
-						},
-						timestamp: Date.now(),
-					})
+
+				// 处理助手消息
+				if (e.role === 'assistant') {
+					if (e.content.type === 'response') {
+						const assistantMessage: Message = {
+							id: e.id,
+							messageId: messagesId,
+							sessionId: chatId,
+							role: 'assistant',
+							content: e.content.text || '',
+							reasoning_content: e.content.reasoning || '',
+							toolCallIds: [],
+							timestamp: Date.now(),
+						};
+						messagesDB.get(chatId)?.push(assistantMessage);
+					}
+					return;
 				}
-				if (event.role === 'tool') {
-					let eventContent: any
-					if (event.content.type === 'tool_call') {
-						eventContent = {
-							type: 'tool_call',
-							toolName: event.content.tool,
-							content: JSON.stringify(event.content.params || {}),
-							reasoning: event.content.reasoning,
-							taskId: event.content.taskId,
+
+				// 处理工具相关消息 - role === 'tool'
+				if (e.role === 'tool') {
+					if (e.content.type === 'tool_call') {
+						// 添加工具调用记录
+						const toolCall: ToolCall = {
+							id: e.content.taskId,
+							messageId: messagesId,
+							sessionId: chatId,
+							toolName: e.content.tool,
+							params: e.content.params || {},
+							status: 'pending',
+							order: null,
+							reasoning: e.content.reasoning,
+							timestamp: Date.now(),
+						};
+						toolCallsDB.get(chatId)?.push(toolCall);
+
+						// 更新父消息的 toolCallIds 引用
+						const parentMsg = messagesDB.get(chatId)?.find(m => m.messageId === messagesId);
+						if (parentMsg) {
+							parentMsg.toolCallIds.push(toolCall.id);
 						}
-					} else if (event.content.type === 'tool_result') {
-						eventContent = {
-							type: 'tool_result',
-							toolName: event.content.tool,
-							content: event.content.result,
-							reasoning: event.content.reasoning,
-							taskId: event.content.taskId,
-						}
-					} else if (event.content.type === 'error') {
-						eventContent = {
-							type: 'error',
-							message: `Error: message ${event.content.message}, code ${event.content.code}.`,
-						}
+						return;
 					}
-					if (!eventContent) {
-						return
+
+					if (e.content.type === 'tool_result') {
+						// 更新工具调用状态和结果
+						const taskId = e.content.taskId
+						const toolCall = toolCallsDB.get(chatId)?.find(tc => tc.id === taskId);
+						if (toolCall) {
+							toolCall.result = e.content.result;
+							toolCall.status = 'completed';
+						}
+						return;
 					}
-					messagesDB.get(chatId)?.push({
-						id: event.id,
-						parentId: contextId,
-						role: 'assistant',
-						event: eventContent,
-						timestamp: Date.now(),
-					})
+
+					// if (e.content.type === 'error') {
+					// 	const taskId = e.content.taskId
+					// 	const toolCall = toolCallsDB.get(chatId)?.find(tc => tc.id === taskId);
+					// 	if (toolCall) {
+					// 		toolCall.status = 'error';
+					// 	}
+					// 	return;
+					// }
 				}
 			},
-			getMessages: () =>  messageToOpenaiMessage(messagesDB.get(chatId) || []),
+			getMessages: () => messageToOpenaiMessage(messagesDB.get(chatId) || [], toolCallsDB.get(chatId)),
 
 		})
-		agent.addTool(createGaodeDistrictTool(process.env.GAODE_API_KEY || ''));
-		agent.addTool(createGaodeWeatherTool(process.env.GAODE_API_KEY || ''));
+		// 添加工具
+		agent.addTool(gaodeDistrictTool);
+		agent.addTool(gaodeWeatherTool);
 
+		// 如果没有系统消息，添加系统提示词
 		if (!(messagesDB.get(chatId)?.length)) {
-			messagesDB.set(chatId, [{
+			messagesDB.get(chatId)?.push({
 				id: uuidV4(),
+				messageId: uuidV4(),
+				sessionId: chatId,
 				role: 'system',
-				event: {
-					type: 'content',
-					content: buildSystemPrompt({ toolList: agent.getToolsDescription() }),
-				},
+				content: buildSystemPrompt({ toolList: agent.getToolsDescription() }),
+				reasoning_content: '',
+				toolCallIds: [],
 				timestamp: Date.now(),
-			}]);
+			});
 		}
 
 		if (isStream) {
 			// TODO: 实现流式请求逻辑
 		} else {
-			const result = await agent.chat(input);
 			event.node.res.writeHead(200, {
 				'Content-Type': 'application/json',
 				'Cache-Control': 'no-cache',
 				'Connection': 'keep-alive',
 				'Access-Control-Allow-Origin': '*'
 			});
+			const result = await agent.chat(input);
 			event.node.res.write(JSON.stringify(result));
 			event.node.res.end();
 			return;

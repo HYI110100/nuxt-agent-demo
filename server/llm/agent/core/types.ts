@@ -87,7 +87,7 @@ export interface LLMClient {
     /** 流式请求 - onChunk 传递原始文本片段 */
     sendStreamRequest(messages: any[], onChunk: (textFragment: StreamEvent) => void): Promise<void>;
 }
-export type OnLoopEvent = (event: ContextMessage, contextId: string | null) => void | Promise<void>;
+export type OnLoopEvent = (event: ContextMessage) => void | Promise<void>;
 /** Agent 配置接口 */
 export interface AgentConfig {
     llmClient: LLMClient;

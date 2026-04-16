@@ -11,7 +11,6 @@ export type ContextMessage = InternalMessage & { timestamp: number, id: string }
 export class Context {
     private messages: ContextMessage[] = [];
     private state: ContextState = 'idle';
-    private id: string | null = null;
     private currentDecision: any = null;
     // private readonly maxMessages: number;
     private onLoopEvent?: OnLoopEvent;
@@ -19,7 +18,6 @@ export class Context {
     constructor({ maxMessages = 10, onLoopEvent }: { maxMessages?: number; onLoopEvent?: OnLoopEvent }) {
         // this.maxMessages = maxMessages;
         this.onLoopEvent = onLoopEvent;
-        this.id = uuidV4();
     }
 
     /** 添加消息 */
@@ -31,7 +29,7 @@ export class Context {
         }
         this.messages.push(newData);
         if (this.onLoopEvent) {
-            this.onLoopEvent(newData, this.id);
+            this.onLoopEvent(newData);
         }
         return newData;
     }
@@ -65,7 +63,6 @@ export class Context {
     clear() {
         this.messages = [];
         this.state = 'idle';
-        this.id = null
         this.currentDecision = null;
     }
 }

@@ -6,6 +6,6 @@
 import Agent from './core/agent';
 
 // 工具相关
-import {ToolRegistry, createTool} from './nodes/registry';
+import { createTool } from './nodes/registry';
 
-export { Agent, ToolRegistry, createTool };
+export { Agent, createTool };

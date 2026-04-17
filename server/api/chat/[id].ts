@@ -15,11 +15,26 @@ export default defineEventHandler(async (event: H3Event) => {
 	const { input } = body;
 	const chatId = getRouterParam(event, 'id') || '';
 	try {
-		if (!input || !chatId) {
-			throw new Error('Missing required fields');
+		if (!input) {
+			throw createError({
+				statusCode: 400,
+				statusMessage: '请输入消息内容',
+			});
 		}
+
+		if (!chatId) {
+			throw createError({
+				statusCode: 400,
+				statusMessage: '请输入对话ID',
+			});
+		}
+
 		if (!chatsDB.has(chatId)) {
-			throw new Error(`Chat ${chatId} not found`);
+			// throw createError({
+			// 	statusCode: 400,
+			// 	statusMessage: `对话 ${chatId} 不存在`,
+			// });
+			chatsDB.set(chatId, { id: chatId, title: '新对话' });
 		}
 
 		// 初始化新的消息表和工具调用表（如果不存在）
@@ -146,7 +161,8 @@ export default defineEventHandler(async (event: H3Event) => {
 				'Access-Control-Allow-Origin': '*'
 			});
 			const result = await agent.chat(input);
-			event.node.res.write(JSON.stringify(result));
+			// event.node.res.write(JSON.stringify(result));
+			event.node.res.write(JSON.stringify({ success: true, messages: messagesDB.get(chatId) || [], toolCalls: toolCallsDB.get(chatId) || [] }));
 			event.node.res.end();
 			return;
 		}

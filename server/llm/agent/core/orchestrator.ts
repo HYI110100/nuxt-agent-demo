@@ -25,7 +25,7 @@ class Orchestrator {
             debug("执行并行模式:", plan.tools.map(t => t.name).join(", "));
             const promises = plan.tools.map(async (tool, index) => {
                 debug("启动并行工具执行:", { index, tool: tool.name });
-                const result = await this.thinkActObserver(tool, plan.description);
+                const result = await this.thinkActObserver(tool, `- 当前工具目标：${tool.intention || ''}\n - 当前计划目标：${plan.description || ''}`);
                 return { index, result };
             });
             const outcomes = await Promise.all(promises);
@@ -57,7 +57,7 @@ class Orchestrator {
             for (const index in plan.tools) {
                 const tool = plan.tools[index];
                 debug(`准备执行串行工具 [${index}]:`, tool.name);
-                const result = await this.thinkActObserver(tool, plan.description);
+                const result = await this.thinkActObserver(tool, `- 当前工具目标：${tool.intention || ''}\n - 当前计划目标：${plan.description || ''}`);
                 if (result.type === 'error') {
                     warn("串行工具执行失败:", { index, tool: tool.name, error: result.message });
                     toolResults.push({
@@ -87,7 +87,7 @@ class Orchestrator {
         const toolInfo = this.toolManager.get(tool.name);
         const historyMessages: ChatMessage[] = [{
             role: 'user',
-            content: `当前任务：执行工具 ${tool.name}，参数：${JSON.stringify(tool.params)}。上下文：${context}`
+            content: `${context}\n -当前工具：${tool.name}\n -当前工具参数：${JSON.stringify(tool.params || '{}')}`
         }];
         const extraSystemPrompt = `## 工具：
 ${toolInfo ? this.toolManager.getToolsPrompt([toolInfo]) : ''}`

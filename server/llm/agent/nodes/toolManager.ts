@@ -1,4 +1,4 @@
-export type ToolCallType = { name: string; params?: Record<string, any> };
+export type ToolCallType = { name: string; params?: Record<string, any>, intention?: string };
 
 import { debug, warn, error } from "../utils/logger";
 

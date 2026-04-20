@@ -95,7 +95,7 @@ class PlanningNode {
 
 ## 输出格式
 - 不需要计划制定：\`{ "type": "response", "content": "直接回复内容" }\`
-- 需要计划制定：\`{ "type": "plan", "content": "用第一人称、自然口语化的方式，描述你打算做什么。","intention": "用户意图" , "plans": [{ "mode": "serial/parallel", "description": "简短描述当前计划的目标", "step": "当前计划执行顺序，数字类型，从1开始递增", "tools": [{ "name": "工具名", "params": { "参数名": "参数值" } }] }] }\`
+- 需要计划制定：\`{ "type": "plan", "content": "用第一人称、自然口语化的方式，描述你打算做什么。","intention": "用户意图" , "plans": [{ "mode": "serial/parallel", "description": "简短描述当前计划的目标", "step": "当前计划执行顺序，数字类型，从1开始递增", "tools": [{ "name": "工具名", "params": { "参数名": "参数值" },"intention": "执行工具意图" }] }] }\`
 - 不需要多工具调用：\`{ "type": "tool_call", , "content": "用第一人称、自然口语化的方式，描述你打算做什么。","intention": "用户意图" , "name": "工具名", "params": { "参数名": "参数值" } }\`
 ${toolsPrompt || ''}
 

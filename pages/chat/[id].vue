@@ -90,24 +90,24 @@
           </h3>
           <div v-for="plan in currentDetailMsg.plans" :key="plan.id" class="border border-gray-200 rounded-lg p-3">
             <div class="text-sm font-medium text-gray-800 mb-2">{{ plan.description }}</div>
-            <div class="text-xs text-gray-500 mb-2">状态：{{ plan.status }}</div>
+            <div class="text-xs text-gray-500 mb-2">状态：{{ plan.status }} | 模式：{{ plan.mode === "parallel" ? "并行" : "串行" }}</div>
 
-            <!-- Tool Calls -->
-            <div v-if="getToolCallsForPlan(plan.id).length > 0" class="mt-3 space-y-2">
-              <div v-for="tc in getToolCallsForPlan(plan.id)" :key="tc.id" class="bg-gray-50 rounded p-2 text-xs">
-                <div class="font-medium text-gray-700 mb-1">{{ tc.toolName }} ({{ tc.toolCallIndex}})</div>
+            <!-- Tool Calls & Results Combined -->
+            <div class="mt-3 space-y-2">
+              <div v-for="(tc, idx) in getToolCallsForPlan(plan.id)" :key="tc.id" class="bg-gray-50 rounded p-2 text-xs">
+                <div class="font-medium text-gray-700 mb-1">🔧 {{ tc.name }} ({{ plan.mode === "parallel" ? "#" : "顺序：" }}{{ plan.mode === "parallel" ? idx + 1 : tc.step + 1 }})</div>
                 <div class="text-gray-500 mb-1">参数：{{ JSON.stringify(tc.params) }}</div>
-                <div v-if="tc.status === 'completed'" class="text-green-600">✓ 已完成</div>
-                <div v-else-if="tc.status === 'failed'" class="text-red-600">✗ 失败</div>
-              </div>
-            </div>
 
-            <!-- Tool Results -->
-            <div v-if="getToolResultsForPlan(plan.id).length > 0" class="mt-3 space-y-2">
-              <div v-for="tr in getToolResultsForPlan(plan.id)" :key="tr.id" class="bg-gray-50 rounded p-2 text-xs">
-                <div class="font-medium text-gray-700 mb-1">{{ tr.toolName }} ({{ tr.toolCallIndex + 1 }})</div>
-                <div class="text-gray-500">结果：{{ JSON.stringify(tr.result, null, 2) }}</div>
-                <div class="text-green-600 text-xs mt-1">✓ {{ tr.status }}</div>
+                <!-- Find matching result by index for parallel, by step for serial -->
+                <div v-if="getToolResultsForPlan(plan.id)[idx]" class="mt-2 pt-2 border-t border-gray-200">
+                  <pre class="whitespace-pre-wrap text-sm">{{ JSON.stringify(getToolResultsForPlan(plan.id)[idx].result) }}</pre>
+                </div>
+
+                <div v-else>
+                  <div v-if="tc.status === 'completed'" class="text-green-600">✓ 执行完成</div>
+                  <div v-else-if="tc.status === 'failed'" class="text-red-600">✗ 失败</div>
+                  <div v-else class="text-yellow-600">⏳ 待执行</div>
+                </div>
               </div>
             </div>
           </div>

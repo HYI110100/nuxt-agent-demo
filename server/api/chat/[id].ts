@@ -1,154 +1,133 @@
-import openai from 'openai';
 import { H3Event, readBody } from 'h3';
-import { messagesDB, chatsDB, toolCallsDB } from '../../db/chat';
-import type { Message, ToolCall } from '../../db/chat';
-import type { notStreamEvent } from '../../llm/agent/core/types';
+import { chatsDB, messagesDB } from '../../db/chat';
 import { Agent } from '../../llm/agent';
 import { gaodeDistrictTool } from '~/server/llm/tools/gaodeDistrict';
 import { gaodeWeatherTool } from '~/server/llm/tools/gaodeWeather';
-import { messageToOpenaiMessage, buildSystemPrompt } from '~/server/utils';
-import { v4 as uuidV4 } from 'uuid';
-import { sendRequest, sendStreamRequest } from '~/server/llm/llmClient';
+import { messageToOpenaiMessage } from '~/server/utils';
+import llmClient from '~/server/llm/llmClient';
+import { addUserMessage, createAssistantMessage, addPlanToAssistant, updatePlanStatus, incrementPlanToolCount, addToolCallToAssistant, addToolResultToAssistant, updateToolCallStatus, setAssistantResult, updateContent, getMessageById, addSystemMessage } from '../../db/services';
 
 export default defineEventHandler(async (event: H3Event) => {
-	const body = await readBody(event);
-	const { input } = body;
-	const chatId = getRouterParam(event, 'id') || '';
 	try {
-		if (!input) {
-			throw createError({
-				statusCode: 400,
-				statusMessage: '请输入消息内容',
-			});
-		}
-
+		const chatId = getRouterParam(event, 'id') || '';
 		if (!chatId) {
 			throw createError({
 				statusCode: 400,
-				statusMessage: '请输入对话ID',
+				statusMessage: '缺少对话 ID',
 			});
 		}
 
 		if (!chatsDB.has(chatId)) {
-			// throw createError({
-			// 	statusCode: 400,
-			// 	statusMessage: `对话 ${chatId} 不存在`,
-			// });
 			chatsDB.set(chatId, { id: chatId, title: '新对话' });
 		}
 
-		// 初始化新的消息表和工具调用表（如果不存在）
-		if (!messagesDB.has(chatId)) {
-			messagesDB.set(chatId, []);
-		}
-		if (!toolCallsDB.has(chatId)) {
-			toolCallsDB.set(chatId, []);
+		const body = await readBody(event);
+		const input = body?.input || '';
+		if (!input) {
+			throw createError({
+				statusCode: 400,
+				statusMessage: 'input 参数不能为空',
+			});
 		}
 
-		const isStream = false;
-		const messagesId = uuidV4();
+		const isStream = body?.isStream || false;
+		const conversationId = chatId;
+
+		if (!messagesDB.has(conversationId)) {
+			messagesDB.set(conversationId, []);
+		}
+
+		// 2. 创建空的 assistant 消息
+		let assistantMessage = createAssistantMessage(conversationId);
+
+		// 追踪当前 plan
+		let currentPlanId: string | null = null;
 
 		const agent = new Agent({
-			llmClient: { sendRequest, sendStreamRequest },
-			onLoopEvent: async (e) => {
-				// 处理用户消息
-				if (e.role === 'user') {
-					const userMessage: Message = {
-						id: e.id,
-						messageId: messagesId,
-						sessionId: chatId,
-						role: 'user',
-						content: e.content.type === 'question' ? e.content.text : `Error: ${e.content.message}`,
-						toolCallIds: [],
-						timestamp: Date.now(),
-					};
-					messagesDB.get(chatId)?.push(userMessage);
-					return;
+			systemPrompt: '你是一个乐于助人的助手。',
+			tools: [gaodeDistrictTool, gaodeWeatherTool],
+			llmClient: llmClient,
+			getHistoryMessages: async () => messageToOpenaiMessage(messagesDB.get(conversationId) || []),
+			onLoopEvent: (e) => {
+				if (e.type === 'input') {
+					addUserMessage(conversationId, input);
+				}
+				if (!(messagesDB.get(chatId)?.find(msg => msg.role === 'assistant' && msg.id === assistantMessage.id))) {
+					messagesDB.get(conversationId)!.push(assistantMessage);
+				}
+				if (e.type === 'response') {
+					updateContent(conversationId, assistantMessage.id, e.content, e.reasoning_content);
+				}
+				// 计划开始事件
+				if (e.type === 'plan_start') {
+					const { planId } = addPlanToAssistant(
+						conversationId,
+						assistantMessage.id,
+						e.planDescription,
+						e.mode,
+						e.step
+					);
+					currentPlanId = planId;
+
+					// 将计划描述写入 content
+					assistantMessage = updateContent(conversationId, assistantMessage.id, e.planDescription);
 				}
 
-				// 处理助手消息
-				if (e.role === 'assistant') {
-					if (e.content.type === 'response') {
-						const assistantMessage: Message = {
-							id: e.id,
-							messageId: messagesId,
-							sessionId: chatId,
-							role: 'assistant',
-							content: e.content.text || '',
-							reasoning_content: e.content.reasoning || '',
-							toolCallIds: [],
-							timestamp: Date.now(),
-						};
-						messagesDB.get(chatId)?.push(assistantMessage);
-					}
-					return;
+				// 工具调用事件
+				if (e.type === 'tool_result' && currentPlanId) {
+					// 先添加 toolCall 记录
+					const { toolCallId } = addToolCallToAssistant(
+						conversationId,
+						assistantMessage.id,
+						currentPlanId,
+						e.index,
+						e.toolName,
+						e.params,
+						e.status === 'success' ? 'completed' : 'failed'
+					);
+
+					// 再添加 toolResult 记录
+					addToolResultToAssistant(
+						conversationId,
+						assistantMessage.id,
+						currentPlanId,
+						toolCallId,
+						typeof e.result === 'string' ? JSON.parse(e.result) : e.result,
+						e.status
+					);
+
+					// 更新 toolCall 状态
+					updateToolCallStatus(
+						conversationId,
+						assistantMessage.id,
+						toolCallId,
+						e.status === 'success' ? 'completed' : 'failed'
+					);
+
+					// Plan 的工具计数 +1
+					incrementPlanToolCount(conversationId, assistantMessage.id, currentPlanId);
 				}
 
-				// 处理工具相关消息 - role === 'tool'
-				if (e.role === 'tool') {
-					if (e.content.type === 'tool_call') {
-						// 添加工具调用记录
-						const toolCall: ToolCall = {
-							id: e.content.taskId,
-							messageId: messagesId,
-							sessionId: chatId,
-							toolName: e.content.tool,
-							params: e.content.params || {},
-							status: 'pending',
-							order: null,
-							reasoning: e.content.reasoning,
-							timestamp: Date.now(),
-						};
-						toolCallsDB.get(chatId)?.push(toolCall);
+				// 计划完成事件
+				if (e.type === 'plan_complete' && currentPlanId) {
+					updatePlanStatus(conversationId, assistantMessage.id, currentPlanId, 'completed');
+					currentPlanId = null;
+				}
 
-						// 更新父消息的 toolCallIds 引用
-						const parentMsg = messagesDB.get(chatId)?.find(m => m.messageId === messagesId);
-						if (parentMsg) {
-							parentMsg.toolCallIds.push(toolCall.id);
-						}
-						return;
-					}
-
-					if (e.content.type === 'tool_result') {
-						// 更新工具调用状态和结果
-						const taskId = e.content.taskId
-						const toolCall = toolCallsDB.get(chatId)?.find(tc => tc.id === taskId);
-						if (toolCall) {
-							toolCall.result = e.content.result;
-							toolCall.status = 'completed';
-						}
-						return;
-					}
-
-					// if (e.content.type === 'error') {
-					// 	const taskId = e.content.taskId
-					// 	const toolCall = toolCallsDB.get(chatId)?.find(tc => tc.id === taskId);
-					// 	if (toolCall) {
-					// 		toolCall.status = 'error';
-					// 	}
-					// 	return;
-					// }
+				// 最终结果事件
+				if (e.type === 'result') {
+					setAssistantResult(
+						conversationId,
+						assistantMessage.id,
+						e.content,
+						e.reasoning_content
+					);
 				}
 			},
-			getMessages: () => messageToOpenaiMessage(messagesDB.get(chatId) || [], toolCallsDB.get(chatId)),
+		});
 
-		})
-		// 添加工具
-		agent.addTool(gaodeDistrictTool);
-		agent.addTool(gaodeWeatherTool);
-
-		// 如果没有系统消息，添加系统提示词
 		if (!(messagesDB.get(chatId)?.length)) {
-			messagesDB.get(chatId)?.push({
-				id: uuidV4(),
-				messageId: uuidV4(),
-				sessionId: chatId,
-				role: 'system',
-				content: buildSystemPrompt({ toolList: agent.getToolsDescription() }),
-				reasoning_content: '',
-				toolCallIds: [],
-				timestamp: Date.now(),
-			});
+			addSystemMessage(chatId, agent.getSystemPrompt());
 		}
 
 		if (isStream) {
@@ -160,15 +139,13 @@ export default defineEventHandler(async (event: H3Event) => {
 				'Connection': 'keep-alive',
 				'Access-Control-Allow-Origin': '*'
 			});
-			const result = await agent.chat(input);
-			// event.node.res.write(JSON.stringify(result));
-			event.node.res.write(JSON.stringify({ success: true, messages: messagesDB.get(chatId) || [], toolCalls: toolCallsDB.get(chatId) || [] }));
+			await agent.chat(input);
+			event.node.res.write(JSON.stringify(getMessageById(conversationId, assistantMessage.id)));
 			event.node.res.end();
 			return;
 		}
 	} catch (error: any) {
 		if (event.node.res.headersSent) {
-
 		} else {
 			throw error
 		}

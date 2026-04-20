@@ -1,148 +1,142 @@
-import type { StreamEvent } from './types';
-import { Context, type ContextMessage } from '../nodes/context';
-import type { Thinker } from '../nodes/thinker';
-import type { Actor } from '../nodes/actor';
-import { v4 as uuidV4 } from 'uuid';
-// import type { ToolRegistry } from '../nodes/registry';
+import type ActingNode from "../nodes/acting";
+import type { PlanType } from "../nodes/planning";
+import type ThinkNode from "../nodes/think";
+import type ToolManager from "../nodes/toolManager";
+import type { ToolCallType } from "../nodes/toolManager";
+import type { ChatMessage, ResponseType, PlanExecutionResult, ErrorType } from "./types";
 
-/**
- * 编排器
- * 协调 think-act 循环
- */
-export class Orchestrator {
-    private thinker: Thinker;
-    private actor: Actor;
-    // private toolRegistry: ToolRegistry;
-    private context: Context;
-    private maxIterations: number;
-    private getMessages: () => any[];
+class Orchestrator {
+    private actingNode: ActingNode;
+    private thinkNode: ThinkNode;
+    private toolManager: ToolManager;
 
-    constructor(config: {
-        maxIterations: number;
-        thinker: Thinker;
-        actor: Actor;
-        // toolRegistry: ToolRegistry;
-        context: Context;
-        getMessages: () => any[];
-    }) {
-        this.thinker = config.thinker;
-        this.actor = config.actor;
-        // this.toolRegistry = config.toolRegistry;
-        this.context = config.context;
-        this.getMessages = config.getMessages;
-        this.maxIterations = config.maxIterations;
+    constructor({ actingNode, thinkNode, toolManager }: { actingNode: ActingNode, thinkNode: ThinkNode, toolManager: ToolManager }) {
+        this.actingNode = actingNode;
+        this.thinkNode = thinkNode;
+        this.toolManager = toolManager;
     }
 
-    /**
-     * 非流式运行
-     * @param userInput 用户输入
-     * @returns 最终消息
-     */
-    async run(userInput: string): Promise<ContextMessage> {
-        // 添加用户消息
-        this.context.addMessage({
-            role: 'user',
-            content: {
-                type: 'question',
-                text: userInput,
-            },
-        });
-        
-        let iterations = 0;
-        let taskId = '';
+    async run(plan: PlanType): Promise<PlanExecutionResult> {
+        const toolResults: PlanExecutionResult['toolResults'] = [];
 
-        while (iterations < this.maxIterations) {
-            iterations++;
-            // console.log(iterations, '=========================================');
-            try {
-                // 获取当前消息
-                const messages = this.getMessages();
-                // 决策
-                const decision = await this.thinker.decide(messages);
-                // console.log("decision",decision);
-                // 处理决策
-                const result = await this.actor.process(decision);
-                // console.log("result",result);
-                if (result.type === 'response') {
-                    return this.context.addMessage({
-                        role: 'assistant',
-                        content: {
-                            type: 'response',
-                            text: result.text,
-                        },
-                    });
-                }
+        if (plan.mode === "parallel") {
+            const promises = plan.tools.map(async (tool, index) => {
+                const result = await this.thinkActObserver(tool, plan.description);
+                return { index, result };
+            });
+            const outcomes = await Promise.all(promises);
 
-                if(decision.type === 'tool_call') {
-                    taskId = `t_${uuidV4()}`;
-                    this.context.addMessage({
-                        role: 'tool',
-                        content: {
-                            type: 'tool_call',
-                            tool: decision.tool,
-                            params: decision.params || {},
-                            taskId: taskId,
-                            reasoning: decision.reasoning,
-                        },
-                    });
-                }
-
-                if (result.type === 'tool_result') {
-                    // 添加工具调用消息
-                    this.context.addMessage({
-                        role: 'tool',
-                        content: {
-                            type: 'tool_result',
-                            tool: result.tool,
-                            result: result.result,
-                            taskId: taskId,
-                        },
-                    });
-                    taskId = '';
-                    continue;
-                }
-
+            for (const { index, result } of outcomes) {
+                const tool = plan.tools[index];
                 if (result.type === 'error') {
-                    return this.context.addMessage({
-                        role: 'tool',
-                        content: {
-                            type: 'error',
-                            message: result.message,
-                            code: result.code,
-                        },
+                    toolResults.push({
+                        index: -1,
+                        toolName: tool.name,
+                        params: tool.params,
+                        result: result.message,
+                        status: 'error'
+                    });
+                } else {
+                    toolResults.push({
+                        index: -1,
+                        toolName: tool.name,
+                        params: tool.params,
+                        result: result.content,
+                        status: 'success'
                     });
                 }
-            } catch (error) {
-                console.error('Error in run:', error);
-                return this.context.addMessage({
-                    role: 'assistant',
-                    content: {
-                        type: 'error',
-                        message: '运行时错误',
-                        code: 'RUNTIME_ERROR',
-                    },
-                });
+            }
+        } else {
+            // 串行执行
+            for (const index in plan.tools) {
+                const tool = plan.tools[index];
+                const result = await this.thinkActObserver(tool, plan.description);
+                if (result.type === 'error') {
+                    toolResults.push({
+                        index: Number(index),
+                        toolName: tool.name,
+                        params: tool.params,
+                        result: result.message,
+                        status: 'error'
+                    });
+                } else {
+                    toolResults.push({
+                        index: Number(index),
+                        toolName: tool.name,
+                        params: tool.params,
+                        result: result.content,
+                        status: 'success'
+                    });
+                }
             }
         }
-        // 清理上下文消息
-        this.context.clear();
-        // 超过最大迭代次数
-        return this.context.addMessage({
-            role: 'assistant',
-            content: {
-                type: 'error',
-                message: '达到最大迭代次数，未收到响应',
-                code: 'MAX_ITERATIONS_EXCEEDED',
-            },
-        });
+
+        return { toolResults };
     }
+    private async thinkActObserver(tool: ToolCallType, context: string): Promise<ResponseType | ErrorType> {
+        // 初始化历史消息
+        const toolInfo = this.toolManager.get(tool.name);
+        const historyMessages: ChatMessage[] = [{
+            role: 'user',
+            content: `当前任务：执行工具 ${tool.name}，参数：${JSON.stringify(tool.params)}。上下文：${context}`
+        }];
+        const extraSystemPrompt = `## 工具：
+${toolInfo ? this.toolManager.getToolsPrompt([toolInfo]) : ''}`
 
-    /**
-     * 流式运行
-     * @param userInput 用户输入
-     * @yields StreamEvent 流式事件
-     */
-    async *runStream(userInput: string): AsyncGenerator<StreamEvent> {
+        let maxIterations = 3;
+        let iterations = 0;
 
+        while (iterations < maxIterations) {
+            // 思考：根据历史决定下一步
+            const thinkResult = await this.thinkNode.decideNextAction(historyMessages, extraSystemPrompt);
+            
+            // 判断是否继续
+            if (thinkResult.type === 'response') {
+                return {
+                    type: "response",
+                    content: thinkResult.content,
+                    reasoning_content: thinkResult.reasoning_content,
+                };
+            }
+
+            let t: ToolCallType = tool
+            if(thinkResult.type === 'tool_call'){
+                t = {
+                    name: thinkResult.tool,
+                    params: thinkResult.params,
+                }
+            }
+
+            // 行动：执行决策
+            const result = await this.actingNode.run(t);
+
+            if (result.type === 'error') {
+                // 错误时，把错误信息加入历史，让模型重新思考
+                historyMessages.push({
+                    role: 'assistant',
+                    content: `执行失败：${result.message}`
+                }, {
+                    role: 'user',
+                    content: '执行出错，如果你不能继续执行，请回复：{"type": "respond", "content": "错误原因"}'
+                });
+                iterations++;
+                continue;
+            }
+
+            // 观察：把成功结果加入历史
+            historyMessages.push({
+                role: 'assistant',
+                content: `执行成功：${JSON.stringify(result)}`
+            });
+
+            iterations++;
+        }
+
+        return {
+            type: "error",
+            message: `超过最大循环次数 ${maxIterations},最后一次执行结果：${historyMessages.length > 0 ? historyMessages[historyMessages.length - 1].content : '无'}`,
+            code: "max_iterations_exceeded",
+        };
     }
 }
+export default Orchestrator;

@@ -5,7 +5,4 @@
 // 核心类型和类
 import Agent from './core/agent';
 
-// 工具相关
-import { createTool } from './nodes/registry';
-
-export { Agent, createTool };
+export { Agent };

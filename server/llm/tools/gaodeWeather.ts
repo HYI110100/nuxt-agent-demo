@@ -1,4 +1,4 @@
-import { createTool } from '../agent/nodes/registry';
+import { createTool } from '../agent/nodes/toolManager';
 
 export const gaodeWeatherTool = createTool({
     name: 'gaode_weather',

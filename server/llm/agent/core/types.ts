@@ -1,136 +1,95 @@
-import type { ContextMessage } from "../nodes/context";
-
-export type Role = 'system' | 'user' | 'assistant' | 'tool';
-
-export type MessageResponse = {
-    type: 'response'
-    text: string;
-    reasoning?: string;
+/**=====================Chat===========================*/
+export interface ChatMessage {
+    role: 'system' | 'user' | 'assistant';
+    content: string;
 }
-export type MessageQuestion = {
-    type: 'question'
-    text: string;
-}
-export type MessageToolResult = {
-    type: 'tool_result';
-    tool: string;
-    result: string;
-    taskId: string;
-    reasoning?: string;
-}
-export type MessageToolCall = {
-    type: 'tool_call';
-    tool: string;
-    params: Record<string, any>;
-    taskId: string;
-    reasoning?: string;
-}
-export type MessageError = {
-    type: 'error';
-    code?: string;
-    message?: string;
-}
-export type Result = MessageResponse | MessageToolResult | MessageError
-export type Decision = MessageResponse | Omit<MessageToolCall, 'taskId'> | MessageError
-
-/**
- * Agent标准消息格式
- * 内容数据流转使用
- */
-export type InternalMessage = {
-    role: 'assistant';
-    content: MessageResponse | MessageError
-} | {
-    role: 'user';
-    content: MessageQuestion | MessageError
-} | {
-    role: 'tool';
-    content: MessageToolCall | MessageToolResult | MessageError
+type Options = { [key: string]: any }
+export interface ChatOptions extends Options {
+    messages: ChatMessage[];
 }
 
-/**
- * 外部消息格式 - 传给 LLM SDK 的原始格式
- * 与 OpenAI Chat API 兼容
- */
-export type ExternalMessage = {
-    role: Exclude<Role, 'tool'>;
+export type StreamCallback = (chunk: string) => void;
+export type ChatResponse = { content: string; reasoning_content?: string; };
+
+export interface LLMClient {
+    chat(input: string | ChatMessage[] | ChatOptions): Promise<ChatResponse>;
+    chat(input: string | ChatMessage[] | ChatOptions, onChunk: StreamCallback): Promise<ChatResponse>;
+}
+
+/**=====================Agent===========================*/
+export interface ErrorType {
+    type: "error";
+    message: string;
+    code: string;
+}
+
+export interface ResponseType {
+    type: "response";
+    content: string;
+    reasoning_content?: string;
+}
+export interface InputType {
+    type: "input";
+    content: string;
+}
+export interface PlanType {
+    type: "plan";
     content: string;
 }
 
-/**
- * 流式事件类型
- * 只包含业务相关事件，不包含传输层事件
- */
-export type StreamEvent =
-    | { type: 'response'; text: string }           // AI 的思考过程
-    | { type: 'tool_call'; tool: string; params?: Record<string, any> }   // 工具调用决策
-    | { type: 'response'; text: string }          // 最终回答
-    | { type: 'error'; code?: string; message?: string };     // 错误
-
-/**
- * 非流式事件类型
- * 只包含业务相关事件，不包含传输层事件
- */
-export type notStreamEvent =
-    | { type: 'response'; reasoning?: string; response: string; }
-    | { type: 'tool_call'; reasoning?: string; response: { tool: string; params: Record<string, any>; } }
-    | { type: 'error'; reasoning?: string; response: { code?: string; message?: string; }; }
-
-/**
- * 外部 LLM 客户端接口
- * Agent 通过这个接口与 LLM 交互，解耦具体实现
- */
-export interface LLMClient {
-    /** 非流式请求 - 返回 LLM 原始响应文本 */
-    sendRequest(messages: any[]): Promise<notStreamEvent>;
-
-    /** 流式请求 - onChunk 传递原始文本片段 */
-    sendStreamRequest(messages: any[], onChunk: (textFragment: StreamEvent) => void): Promise<void>;
+/**=====================Agent Event===========================*/
+export interface ResultType {
+    type: "result";
+    content: string;
+    reasoning_content?: string;
 }
-export type OnLoopEvent = (event: ContextMessage) => void | Promise<void>;
-/** Agent 配置接口 */
-export interface AgentConfig {
-    llmClient: LLMClient;
-    maxContext?: number;        // 最大上下文消息数，默认 10
-    maxIterations?: number;     // 单次最大 loop 次数，默认 3
-    systemPrompt?: string;      // 系统提示词
-    getMessages?: () => any[];  // 获取当前上下文消息的回调
-    onLoopEvent?: OnLoopEvent;  // 每次循环步骤的回调
+export interface ResponseUpdateType {
+    type: "response_update";
+    content: string;
+    reasoning_content?: string;
+}
+/** 计划开始事件 */
+export interface PlanStartEvent {
+    type: 'plan_start';
+    step: number;
+    planDescription: string;
+    mode: "parallel" | "serial";
 }
 
-type ToolType = 'string' | 'number' | 'boolean' | 'object' | 'array';
-
-/** 工具参数定义 */
-export interface ToolParameter {
-    name: string;
-    type: ToolType;
-    description?: string;
-    required?: boolean;
-    enum?: string[];
-    default?: any;
+/** 工具调用结果事件 */
+export interface ToolResultEvent {
+    type: 'tool_result';
+    step: number;
+    index: number;              // 工具在同一 plan 中的索引
+    toolName: string;
+    params?: Record<string, any>;
+    result: any;
+    status: 'success' | 'error';
 }
 
-/**
- * BaseTool 基类
- * 所有自定义工具的基类
- */
-export interface BaseTool {
-    name: string;
-    description?: string;
-    schema?: ToolParameter[];
-    execute(...args: any): Promise<any>;
+/** 计划完成事件 - 包含完整的计划信息 */
+export interface PlanCompleteEvent {
+    type: 'plan_complete';
+    step: number;
+    planDescription: string;
+    mode: "parallel" | "serial";
+    toolCount: number;
+    toolResults: ToolExecutionResult[];
 }
 
-/** 工具定义（用于 createTool 工厂） */
-export interface ToolDefinition {
-    name: string;
-    description?: string;
-    schema?: ToolParameter[];
-    execute: (...args: any) => Promise<any>;
+/**=====================Orchestrator===========================*/
+export interface ToolExecutionResult {
+    index: number;
+    toolName: string;
+    status: 'success' | 'error';
+    result: any;
+    params?: Record<string, any>;
 }
 
-export type ToolDescription = {
-    name: string;
-    description?: string;
-    parameters?: ToolParameter[];
+export interface PlanExecutionResult {
+    toolResults: ToolExecutionResult[];
 }
+
+/**=====================Agent Event===========================*/
+/** Agent.onLoopEvent 所有可发送的事件类型 */
+export type AgentEvent = InputType | ResponseType | ErrorType | PlanStartEvent | ToolResultEvent | PlanCompleteEvent | ResultType;

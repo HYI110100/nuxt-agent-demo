@@ -25,17 +25,18 @@ class Orchestrator {
             debug("执行并行模式:", plan.tools.map(t => t.name).join(", "));
             const promises = plan.tools.map(async (tool, index) => {
                 debug("启动并行工具执行:", { index, tool: tool.name });
-                const result = await this.thinkActObserver(tool, `- 当前工具目标：${tool.intention || ''}\n - 当前计划目标：${plan.description || ''}`);
+                const result = await this.thinkActObserver(tool, `- 当前目标：${tool.intention || ''}\n - 当前计划：${plan.description || ''}\n\n -禁止做当前当前目标之外的事情，因为有其他工具正在执行`);
+                debug(`并行工具执行结果 [${index}]:`, result);
                 return { index, result };
             });
             const outcomes = await Promise.all(promises);
-
+            info("并行工具执行完成");
             for (const { index, result } of outcomes) {
                 const tool = plan.tools[index];
                 if (result.type === 'error') {
                     warn("并行工具执行失败:", { tool: tool.name, error: result.message });
                     toolResults.push({
-                        index: -1,
+                        index: Number(index),
                         toolName: tool.name,
                         params: tool.params,
                         result: result.message,
@@ -43,7 +44,7 @@ class Orchestrator {
                     });
                 } else {
                     toolResults.push({
-                        index: -1,
+                        index: Number(index),
                         toolName: tool.name,
                         params: tool.params,
                         result: result.content,
@@ -57,7 +58,7 @@ class Orchestrator {
             for (const index in plan.tools) {
                 const tool = plan.tools[index];
                 debug(`准备执行串行工具 [${index}]:`, tool.name);
-                const result = await this.thinkActObserver(tool, `- 当前工具目标：${tool.intention || ''}\n - 当前计划目标：${plan.description || ''}`);
+                const result = await this.thinkActObserver(tool, `- 当前目标：${tool.intention || ''}\n - 当前计划：${plan.description || ''}\n\n -禁止做当前当前目标之外的事情，因为有其他工具正在执行`);
                 if (result.type === 'error') {
                     warn("串行工具执行失败:", { index, tool: tool.name, error: result.message });
                     toolResults.push({
@@ -94,13 +95,15 @@ ${toolInfo ? this.toolManager.getToolsPrompt([toolInfo]) : ''}`
 
         let maxIterations = 6;
         let iterations = 0;
+        let decisionPrompt = this.thinkNode.getDecisionPrompt(extraSystemPrompt);
+        historyMessages.unshift(decisionPrompt);
 
         while (iterations < maxIterations) {
             iterations++;
             debug(`Think-Act 循环迭代 [${iterations}/${maxIterations}]`);
             // 思考：根据历史决定下一步
-            const thinkResult = await this.thinkNode.decideNextAction(historyMessages, extraSystemPrompt);
-            debug("decideNextAction 结果:", { type: thinkResult.type });
+            const thinkResult = await this.thinkNode.decideNextAction(historyMessages);
+            debug("thinkActResult 结果:", { type: thinkResult.type });
 
             // 判断是否继续
             if (thinkResult.type === 'response') {

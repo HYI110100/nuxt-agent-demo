@@ -66,7 +66,7 @@ class Agent {
                 throw new Error(thinkResult.message);
             }
             if (thinkResult.type === 'response') {
-                const finalThinkResult = await this.thinkNode.generateFinalResponse([{ role: 'assistant', content: `-[意图]${planResult.intention}\n-[行动]${planResult.content}\n -[结果]${thinkResult.content}` }]);
+                const finalThinkResult = await this.thinkNode.generateFinalResponse([this.thinkNode.getFinalResponsePrompt(), { role: 'assistant', content: `-[意图]${planResult.intention}\n-[行动]${planResult.content}\n -[结果]${thinkResult.content}` }]);
                 debug("生成最终回复结果:", { type: finalThinkResult.type });
                 if (finalThinkResult.type === 'error') {
                     info("生成最终回复失败:", finalThinkResult.message);
@@ -140,6 +140,8 @@ class Agent {
                 });
             }
             debug("开始生成最终回复，历史消息数:", localHistory.length);
+            const finalResponsePrompt = this.thinkNode.getFinalResponsePrompt();
+            localHistory.unshift(finalResponsePrompt);
             const finalThinkResult = await this.thinkNode.generateFinalResponse(localHistory);
             if (finalThinkResult.type === 'error') {
                 info("多步骤任务最终回复失败:", finalThinkResult.message);

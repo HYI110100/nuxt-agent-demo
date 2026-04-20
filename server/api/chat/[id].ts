@@ -6,6 +6,7 @@ import { gaodeWeatherTool } from '~/server/llm/tools/gaodeWeather';
 import { messageToOpenaiMessage } from '~/server/utils';
 import llmClient from '~/server/llm/llmClient';
 import { addUserMessage, createAssistantMessage, addPlanToAssistant, updatePlanStatus, incrementPlanToolCount, addToolCallToAssistant, addToolResultToAssistant, updateToolCallStatus, setAssistantResult, updateContent, getMessageById, addSystemMessage } from '../../db/services';
+import { webSearchTool } from '~/server/llm/tools/webSearch';
 
 export default defineEventHandler(async (event: H3Event) => {
 	try {
@@ -45,7 +46,7 @@ export default defineEventHandler(async (event: H3Event) => {
 
 		const agent = new Agent({
 			systemPrompt: '你是一个乐于助人的助手。',
-			tools: [gaodeDistrictTool, gaodeWeatherTool],
+			tools: [gaodeDistrictTool, gaodeWeatherTool, webSearchTool],
 			llmClient: llmClient,
 			getHistoryMessages: async () => messageToOpenaiMessage(messagesDB.get(conversationId) || []),
 			onLoopEvent: (e) => {

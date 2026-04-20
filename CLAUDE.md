@@ -29,60 +29,72 @@ pnpm preview   # Preview production build
 
 ```
 server/
-├── api/chat/[id].ts          # Chat endpoint - initializes Agent and handles requests
-├── db/chat.ts                # In-memory DB: chatsDB, messagesDB, toolCallsDB (dual-table structure)
-├── db/services.ts            # Database service layer for chat operations
+├── api/chat/[id].ts          # Chat endpoint - 支持 GET(获取消息) / POST(发送消息)
+├── api/chat/create.ts        # 创建新对话
+├── api/chat/messages.ts      # 获取历史消息
+├── db/chat.ts                # In-memory DB: chatsDB, messagesDB, toolCallsDB
+├── db/services.ts            # Database service layer
 ├── llm/
 │   ├── llmClient.ts          # LLM client wrapper (OpenAI API compatible)
 │   └── agent/
 │       ├── index.ts          # Agent module export
 │       ├── core/
 │       │   ├── agent.ts      # Main Agent class - orchestrates think-act loop
-│       │   ├── orchestrator.ts # Executes plans (parallel/serial execution)
-│       │   └── types.ts      # Type definitions (ChatMessage, LLMClient, etc.)
+│       │   ├── orchestrator.ts # Executes plans (parallel/serial)
+│       │   └── types.ts      # Type definitions
 │       ├── nodes/
 │       │   ├── planning.ts   # PlanningNode - generates execution plans
 │       │   ├── acting.ts     # ActingNode - executes tools
 │       │   ├── think.ts      # ThinkNode - decides next action
 │       │   └── toolManager.ts # Tool registration and execution manager
-│       ├── utils/
-│       │   ├── logger.ts     # Logging utility with AGENT_LOG_LEVEL control
-│       │   └── jsonUtils.ts  # JSON parsing with Markdown code block handling
 │       └── tools/
 │           ├── gaodeWeather.ts      # Weather query tool
 │           ├── gaodeDistrict.ts     # District info query tool
 │           └── webSearch.ts         # Web search via Serper API
 ├── types/                     # TypeScript type definitions
-├── utils/index.ts            # messageToOpenaiMessage() conversion utility
+└── utils/index.ts            # messageToOpenaiMessage() conversion utility
 ```
 
 ### Frontend Structure
 
 ```
 pages/
-└── index.vue                 # Main page placeholder
+├── index.vue                 # 新建对话页 - 纯输入框
+└── chat/[id].vue             # 聊天主页面 - 侧边栏 + 消息区 + 输入框 + 右侧详情面板
 components/
-└── ChatMarkdown.vue          # Markdown renderer with KaTeX support
-composables/
-└── useLocalStorage.ts        # Local storage composables
+├── ChatInput.vue             # 统一输入组件
+├── AssistantMessageCard.vue  # 助理消息卡片（推理/计划/工具调用/回答）
+└── PlanItem.vue              # 执行计划详情组件
 utils/
-└── markdown-it-katex.ts      # Math rendering plugin
+└── state.ts                  # 跨页面共享状态管理
 ```
 
-### Data Flow
+## Frontend Flow
 
-1. **Request**: Frontend calls `/api/chat/:id` with user input
-2. **Session Setup**: Creates/loads chat session, initializes messages and tool call tables
-3. **Agent Initialization**: 
-   - `PlanningNode` analyzes input and creates execution plan
-   - If direct response needed → returns immediately
-   - If multi-step → creates parallel/serial tool execution plan
-4. **Orchestration**: `Orchestrator.run()` executes plan steps
-5. **Think-Act Loop**: For each tool step:
-   - `ThinkNode`: Decides whether to call tool or respond
-   - `ActingNode`: Executes tool via `ToolManager`
-   - Results fed back into history for next iteration
-6. **Storage**: Messages and tool calls stored in dual-table DB structure
+1. **Create Chat** (`/` → `/chat/{id}`)
+   - User inputs message → POST `/api/chat/create` → Get `chatId`
+   - Store in `sharedState.initialMessage` → Router push to chat page
+
+2. **Load Chat Page** (`/chat/{id}` onMounted)
+   - Get `chatId` from route params
+   - GET `/api/chat/messages?chatId={id}` → Load history
+   - If `sharedState.initialMessage` exists → Append user msg + Auto-send
+   - Clear shared state
+
+3. **Send Message**
+   - Push user message locally → POST `/api/chat/{id}` → Append assistant response
+
+4. **Switch Chat**
+   - Click sidebar item → Router push → New page loads fresh history
+
+## API Endpoints
+
+| Method | Path | Body | Description |
+|--------|------|------|-------------|
+| GET | `/api/chat` | - | Get chat list |
+| POST | `/api/chat/create` | `{ input?: string }` | Create new chat |
+| POST | `/api/chat/{id}` | `{ input: string }` | Send message to chat |
+| POST | `/api/chat/messages` | `{ chatId: string }` | Get message history |
 
 ### Key Design Patterns
 
@@ -107,6 +119,19 @@ const agent = new Agent({
 { name, description, schema[], execute }
 // schema: [{ name, type, description, required?, optional? }]
 ```
+
+## Agent Execution Flow (Internal)
+
+1. User message arrives → `addUserMessage()` stored in messagesDB
+2. `PlanningNode` analyzes input via LLM
+3. Route to **Plan** or **ReAct**:
+   - **Plan mode**: Create execution plan → Orchestrator executes steps
+   - **ReAct mode**: Direct think-act loop
+4. For each tool call:
+   - `ThinkNode`: Decide which tool to use
+   - `ActingNode`: Execute via `ToolManager`
+   - Result fed back into history
+5. Final result → `setAssistantResult()` → Response sent
 
 ## Environment Variables
 
@@ -134,4 +159,3 @@ Development:
 
 - In-memory storage only (no persistent database)
 - Stream mode partially implemented (TODO in chat API)
-- Simple index.vue page (chat UI needs implementation)

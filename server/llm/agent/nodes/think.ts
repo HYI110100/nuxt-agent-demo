@@ -129,6 +129,7 @@ ${extraSystemPrompt}
 
 ## 输出格式：
 - 禁止输出非 JSON对象 格式的文本。{"type": "respond", "content": "最终总结"}
+- markdown 格式输出
 `,
         }
     }

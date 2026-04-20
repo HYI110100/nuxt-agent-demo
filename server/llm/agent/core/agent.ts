@@ -92,6 +92,7 @@ class Agent {
                     role: 'assistant',
                     content: `-[意图]${planResult.intention}\n-[行动]${planResult.content}\n -[结果]${plans.join('\n')}`,
                 }];
+                let previousPlanResult = '';
 
                 for (const plan of plans) {
                     // 计划开始事件
@@ -102,7 +103,7 @@ class Agent {
                         planDescription: plan.description,
                         mode: plan.mode || 'serial',
                     });
-                    const executionResult = await this.orchestrator.run(plan);
+                    const executionResult = await this.orchestrator.run(plan, previousPlanResult);
 
                     // 每个工具执行结果事件
                     for (const toolResult of executionResult.toolResults) {
@@ -135,6 +136,7 @@ class Agent {
                         toolCount: executionResult.toolResults.length,
                         results: executionResult.toolResults.map(r => `${r.toolName}:${r.status}`)
                     });
+                    previousPlanResult = executionResult.toolResults.map(r => `${r.toolName}:${r.status}:${r.result}`).join('\n');
                     this.config.onLoopEvent?.({
                         type: 'plan_complete',
                         step: plan.step,

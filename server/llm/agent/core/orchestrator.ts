@@ -18,7 +18,7 @@ class Orchestrator {
         this.toolManager = toolManager;
     }
 
-    async run(plan: PlanType): Promise<PlanExecutionResult> {
+    async run(plan: PlanType, context: string): Promise<PlanExecutionResult> {
         debug("Orchestrator.run 接收计划:", { mode: plan.mode, toolCount: plan.tools.length, description: plan.description });
         const toolResults: PlanExecutionResult['toolResults'] = [];
 
@@ -26,7 +26,7 @@ class Orchestrator {
             debug("执行并行模式:", plan.tools.map(t => t.name).join(", "));
             const promises = plan.tools.map(async (tool, index) => {
                 debug("启动并行工具执行:", { index, tool: tool.name });
-                const result = await this.thinkActObserver(tool, `- 当前顺序：${index}/${plan.tools.length}\n- 当前任务：${tool.intention || ''}\n - 全局任务：${plan.description || ''}\n\n -禁止做当前当前任务之外的事情，因为有其他工具正在执行`);
+                const result = await this.thinkActObserver(tool, `- 当前顺序：${index}/${plan.tools.length}\n- 当前任务：${tool.intention || ''}\n - 全局任务：${plan.description || ''}\n - 上一轮计划的结果：${context}\n\n -禁止做当前当前任务之外的事情，因为有其他工具正在执行\n -上一轮的结果如果有，需要考虑在当前任务中使用`);
                 debug(`并行工具执行结果 [${index}]:`, result);
                 return { index, result };
             });
@@ -59,7 +59,7 @@ class Orchestrator {
             for (const index in plan.tools) {
                 const tool = plan.tools[index];
                 debug(`准备执行串行工具 [${index}]:`, tool.name);
-                const result = await this.thinkActObserver(tool, `- 当前顺序：${index}/${plan.tools.length}\n- 当前任务：${tool.intention || ''}\n - 全局任务：${plan.description || ''}\n\n 其他禁止做当前当前任务之外的事情，因为有其他工具正在执行`);
+                const result = await this.thinkActObserver(tool, `- 当前顺序：${index}/${plan.tools.length}\n- 当前任务：${tool.intention || ''}\n - 全局任务：${plan.description || ''}\n - 上一轮计划的结果：${context}\n\n -禁止做当前当前任务之外的事情，因为有其他工具正在执行\n -上一轮的结果如果有，需要考虑在当前任务中使用`);
                 debug(`串行工具执行结果 [${index}]:`, result);
                 if (result.type === 'error') {
                     warn("串行工具执行失败:", { index, tool: tool.name, error: result.message });

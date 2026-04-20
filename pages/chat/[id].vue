@@ -1,15 +1,18 @@
 <template>
   <div class="h-screen bg-gray-50 flex">
-    <!-- Sidebar -->
-    <aside :class="['w-64 bg-white border-r border-gray-200 flex flex-col fixed inset-y-0 left-0 transform md:relative md:translate-x-0 transition-transform duration-300 z-30', sidebarOpen ? 'translate-x-0' : '-translate-x-full']">
+    <!-- Left Sidebar -->
+    <aside
+      :class="['w-64 bg-white border-r border-gray-200 flex flex-col fixed inset-y-0 left-0 transform md:relative md:translate-x-0 transition-transform duration-300 z-30', sidebarOpen ? 'translate-x-0' : '-translate-x-full']">
       <div class="p-4 border-b border-gray-200">
-        <button @click="createNewChat" :disabled="isLoading" class="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-2 px-4 rounded-md flex items-center justify-center gap-2 transition-colors">
+        <button @click="createNewChat" :disabled="isLoading"
+          class="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-2 px-4 rounded-md flex items-center justify-center gap-2 transition-colors">
           <span>+</span> 新对话
         </button>
       </div>
       <div class="flex-1 overflow-y-auto p-2">
         <div v-if="chatList.length === 0" class="text-gray-400 text-sm text-center py-8">暂无历史对话</div>
-        <div v-for="chat in chatList" :key="chat.id" @click="selectChat(chat.id)" :class="['p-3 rounded-md cursor-pointer transition-colors mb-1', currentChatId === chat.id ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-100']">
+        <div v-for="chat in chatList" :key="chat.id" @click="selectChat(chat.id)"
+          :class="['p-3 rounded-md cursor-pointer transition-colors mb-1', currentChatId === chat.id ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-100']">
           <div class="text-sm truncate">{{ chat.title }}</div>
         </div>
       </div>
@@ -18,9 +21,11 @@
     <!-- Main Chat Area -->
     <main class="flex-1 flex flex-col min-w-0" @beforeunload="handleBeforeUnload">
       <!-- Header -->
-      <header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center gap-3">
+      <header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center gap-3 flex-shrink-0">
         <button @click="toggleSidebar" class="md:hidden text-gray-500 hover:text-gray-700">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
         </button>
         <h1 class="text-xl font-semibold text-gray-800">AI 助手</h1>
       </header>
@@ -31,7 +36,10 @@
           <div class="animate-pulse">加载中...</div>
         </div>
         <div v-else-if="messages.length === 0" class="flex items-center justify-center h-full text-gray-400">
-          <div class="text-center"><p class="text-lg mb-2">开始与 AI 对话吧</p><p class="text-sm">输入问题，让我来帮你解答</p></div>
+          <div class="text-center">
+            <p class="text-lg mb-2">开始与 AI 对话吧</p>
+            <p class="text-sm">输入问题，让我来帮你解答</p>
+          </div>
         </div>
         <div v-else class="space-y-6 max-w-4xl mx-auto">
           <template v-for="msg in messages" :key="msg.id">
@@ -39,22 +47,83 @@
               <div class="bg-indigo-600 text-white px-4 py-3 rounded-lg max-w-xl">{{ msg.content }}</div>
             </div>
             <div v-else-if="msg.role === 'assistant'" class="flex justify-start animate-slide-in">
-              <AssistantMessageCard :message="msg" />
+              <AssistantMessageCard :message="msg" @togglePanel="handleTogglePanel" />
             </div>
           </template>
           <div v-if="isLoading" class="flex justify-start animate-slide-in">
             <div class="bg-gray-100 px-4 py-3 rounded-lg">
-              <div class="flex gap-2"><span class="animate-pulse">●</span><span class="animate-pulse delay-100">●</span><span class="animate-pulse delay-200">●</span></div>
+              <div class="flex gap-2"><span class="animate-pulse">●</span><span
+                  class="animate-pulse delay-100">●</span><span class="animate-pulse delay-200">●</span></div>
             </div>
           </div>
         </div>
       </div>
 
       <!-- Input Bar -->
-      <div class="border-t border-gray-200 bg-white p-4">
-        <ChatInput v-model="inputContent" :disabled="isLoading || !currentChatId" @send="sendMessage" placeholder="输入你的问题..." />
+      <div class="border-t border-gray-200 bg-white p-4 flex-shrink-0">
+        <ChatInput v-model="inputContent" :disabled="isLoading || !currentChatId" @send="sendMessage"
+          placeholder="输入你的问题..." />
       </div>
     </main>
+
+    <!-- Right Detail Panel (副屏) -->
+    <aside v-show="showDetail" class=" w-96 flex flex-col min-w-0 flex-shrink-0 bg-white border-l border-gray-200">
+      <div class="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+        <h2 class="font-semibold text-gray-800">执行详情</h2>
+        <button @click="closeDetail" class="text-gray-400 hover:text-gray-600 flex-shrink-0">✕</button>
+      </div>
+      <div v-if="currentDetailMsg" class="flex-1 overflow-y-auto p-4 min-h-0">
+        <!-- Reasoning -->
+        <div v-if="currentDetailMsg.reasoningContent" class="mb-4">
+          <h3 class="font-medium text-gray-700 mb-2 flex items-center gap-2">
+            <span>💭</span> 推理思考
+          </h3>
+          <div class="bg-gray-50 p-3 rounded text-sm text-gray-600 whitespace-pre-wrap">
+            {{ currentDetailMsg.reasoningContent }}
+          </div>
+        </div>
+
+        <!-- Plans -->
+        <div v-if="currentDetailMsg.plans && currentDetailMsg.plans.length > 0" class="space-y-4">
+          <h3 class="font-medium text-gray-700 flex items-center gap-2">
+            <span>📋</span> 执行计划
+          </h3>
+          <div v-for="plan in currentDetailMsg.plans" :key="plan.id" class="border border-gray-200 rounded-lg p-3">
+            <div class="text-sm font-medium text-gray-800 mb-2">{{ plan.description }}</div>
+            <div class="text-xs text-gray-500 mb-2">状态：{{ plan.status }}</div>
+
+            <!-- Tool Calls -->
+            <div v-if="getToolCallsForPlan(plan.id).length > 0" class="mt-3 space-y-2">
+              <div v-for="tc in getToolCallsForPlan(plan.id)" :key="tc.id" class="bg-gray-50 rounded p-2 text-xs">
+                <div class="font-medium text-gray-700 mb-1">{{ tc.toolName }} ({{ tc.toolCallIndex}})</div>
+                <div class="text-gray-500 mb-1">参数：{{ JSON.stringify(tc.params) }}</div>
+                <div v-if="tc.status === 'completed'" class="text-green-600">✓ 已完成</div>
+                <div v-else-if="tc.status === 'failed'" class="text-red-600">✗ 失败</div>
+              </div>
+            </div>
+
+            <!-- Tool Results -->
+            <div v-if="getToolResultsForPlan(plan.id).length > 0" class="mt-3 space-y-2">
+              <div v-for="tr in getToolResultsForPlan(plan.id)" :key="tr.id" class="bg-gray-50 rounded p-2 text-xs">
+                <div class="font-medium text-gray-700 mb-1">{{ tr.toolName }} ({{ tr.toolCallIndex + 1 }})</div>
+                <div class="text-gray-500">结果：{{ JSON.stringify(tr.result, null, 2) }}</div>
+                <div class="text-green-600 text-xs mt-1">✓ {{ tr.status }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Final Response -->
+        <div class="mt-4 pt-4 border-t border-gray-200">
+          <h3 class="font-medium text-gray-700 mb-2 flex items-center gap-2">
+            <span>✅</span> 最终回答
+          </h3>
+          <div class="bg-gray-50 p-3 rounded text-sm whitespace-pre-wrap">
+            {{ currentDetailMsg.result?.content || currentDetailMsg.content || '' }}
+          </div>
+        </div>
+      </div>
+    </aside>
 
     <!-- Overlay for mobile sidebar -->
     <div v-if="sidebarOpen" @click="sidebarOpen = false" class="fixed inset-0 bg-black/20 z-20 md:hidden"></div>
@@ -77,6 +146,20 @@ const messages = ref<any[]>([])
 const inputContent = ref('')
 const isLoading = ref(false)
 const sidebarOpen = ref(false)
+
+// Right detail panel state
+const showDetail = ref(false)
+const currentDetailMsg = ref<any>(null)
+
+// Helper to get tool calls/results for a plan
+const getToolCallsForPlan = (planId: string) => {
+  if (!currentDetailMsg.value.toolCalls) return []
+  return currentDetailMsg.value.toolCalls.filter((tc: any) => tc.planId === planId)
+}
+const getToolResultsForPlan = (planId: string) => {
+  if (!currentDetailMsg.value.toolResults) return []
+  return currentDetailMsg.value.toolResults.filter((tr: any) => tr.planId === planId)
+}
 
 // Handle browser close/refresh when loading
 const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -154,6 +237,18 @@ onMounted(() => {
 
 const toggleSidebar = () => {
   sidebarOpen.value = !sidebarOpen.value
+}
+
+// Close right detail panel
+const closeDetail = () => {
+  showDetail.value = false
+  currentDetailMsg.value = null
+}
+
+// Handle toggle detail panel from child component
+const handleTogglePanel = (show: boolean, msg: any) => {
+  showDetail.value = show
+  currentDetailMsg.value = msg
 }
 
 // Main initialization logic
@@ -254,8 +349,18 @@ const sendMessage = async () => {
 
 <style scoped>
 @keyframes slideIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
-.animate-slide-in { animation: slideIn 0.3s ease-out; }
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out;
+}
 </style>

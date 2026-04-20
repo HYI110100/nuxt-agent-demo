@@ -1,5 +1,6 @@
 export type ToolCallType = { name: string; params?: Record<string, any>, intention?: string };
 
+import { parseJSON } from "../utils/jsonUtils";
 import { debug, warn, error } from "../utils/logger";
 
 export type ToolSchemaType = "string" | "number" | "boolean" | "object" | "array";
@@ -232,7 +233,7 @@ function convertType(
             if (Array.isArray(value)) return value;
             if (typeof value === 'string') {
                 try {
-                    return JSON.parse(value);
+                    return parseJSON(value);
                 } catch {
                     return value.split(',').map(s => s.trim());
                 }
@@ -243,7 +244,7 @@ function convertType(
             if (typeof value === 'object' && value !== null) return value;
             if (typeof value === 'string') {
                 try {
-                    return JSON.parse(value);
+                    return parseJSON(value);
                 } catch {
                     return null;
                 }

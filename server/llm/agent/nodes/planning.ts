@@ -1,4 +1,5 @@
 import type { LLMClient, ChatMessage, ErrorType, ResponseType } from "../core/types";
+import { parseJSON } from "../utils/jsonUtils";
 import { debug, warn } from "../utils/logger";
 import type { ToolCallType } from "./toolManager";
 
@@ -45,7 +46,7 @@ class PlanningNode {
         try {
             const response = await this.llm.chat({ messages: historyMessages, response_format:{ type: "json_object" } });
             debug("LLM planning 响应摘要:", response.content.substring(0, 100));
-            const result = JSON.parse(response.content);
+            const result = parseJSON(response.content);
             debug("PlanningNode 解析结果类型:", result.type);
 
             // 检查 plan 是否符合 ResponseType 类型

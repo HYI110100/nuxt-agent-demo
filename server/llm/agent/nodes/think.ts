@@ -1,4 +1,5 @@
 import type { ChatMessage, ErrorType, ResponseType, LLMClient } from "../core/types";
+import { parseJSON } from "../utils/jsonUtils";
 import { debug, info, warn } from "../utils/logger";
 
 interface ThinkToolCallType {
@@ -18,10 +19,13 @@ class ThinkNode {
 
     async decideNextAction(historyMessages: ChatMessage[]): Promise<ThinkResult> {
         debug("decideNextAction 接收消息数:", historyMessages.length);
+        let content = ''
         try {
             const response = await this.llm.chat({ messages: historyMessages, response_format: { type: "json_object" } });
             debug("LLM 响应内容摘要:", response.content.substring(0, 100));
-            const parsed = JSON.parse(response.content);
+            content = response.content;
+
+            const parsed = parseJSON(response.content);
             debug("decideNextAction 解析后的结果:", parsed.type);
 
             if (parsed.type === 'respond' && typeof parsed.content === 'string') {
@@ -50,6 +54,8 @@ class ThinkNode {
             };
 
         } catch (error: any) {
+            console.log("decideNextAction 解析失败，content:", content);
+            
             warn("decideNextAction LLM 调用或解析失败:", error.message || String(error));
             return {
                 type: "error",
@@ -79,7 +85,7 @@ ${extraSystemPrompt}
         try {
             const response = await this.llm.chat({ messages: historyMessages, response_format: { type: "json_object" } });
             debug("LLM 生成最终回复响应摘要:", response.content.substring(0, 100));
-            const parsed = JSON.parse(response.content);
+            const parsed = parseJSON(response.content);
             debug("generateFinalResponse 解析后的结果:", parsed.type);
 
             if (parsed.type === 'respond' && typeof parsed.content === 'string') {

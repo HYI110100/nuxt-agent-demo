@@ -133,6 +133,7 @@ export function addPlanToAssistant(
         status: 'running',
         toolCount: 0,
         createdAt: Date.now(),
+        step,
     };
 
     if (!assistantMsg.plans) {

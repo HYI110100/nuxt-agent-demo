@@ -73,7 +73,7 @@ class Orchestrator {
 
         return { toolResults };
     }
-    private async thinkActObserver(tool: ToolCallType, context: string): Promise<ResponseType | ErrorType> {
+    async thinkActObserver(tool: ToolCallType, context: string): Promise<ResponseType | ErrorType> {
         // 初始化历史消息
         const toolInfo = this.toolManager.get(tool.name);
         const historyMessages: ChatMessage[] = [{

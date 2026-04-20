@@ -60,7 +60,7 @@ export interface PlanStartEvent {
 export interface ToolResultEvent {
     type: 'tool_result';
     step: number;
-    index: number;              // 工具在同一 plan 中的索引
+    index: number;
     toolName: string;
     params?: Record<string, any>;
     result: any;

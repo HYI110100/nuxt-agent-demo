@@ -75,12 +75,12 @@ export default defineEventHandler(async (event: H3Event) => {
 				}
 
 				// 工具调用事件
-				if (e.type === 'tool_result' && currentPlanId) {
+				if (e.type === 'tool_result') {
 					// 先添加 toolCall 记录
 					const { toolCallId } = addToolCallToAssistant(
 						conversationId,
 						assistantMessage.id,
-						currentPlanId,
+						currentPlanId || '',
 						e.index,
 						e.toolName,
 						e.params,
@@ -91,7 +91,7 @@ export default defineEventHandler(async (event: H3Event) => {
 					addToolResultToAssistant(
 						conversationId,
 						assistantMessage.id,
-						currentPlanId,
+						currentPlanId || '',
 						toolCallId,
 						typeof e.result === 'string' ? JSON.parse(e.result) : e.result,
 						e.status
@@ -104,9 +104,10 @@ export default defineEventHandler(async (event: H3Event) => {
 						toolCallId,
 						e.status === 'success' ? 'completed' : 'failed'
 					);
-
-					// Plan 的工具计数 +1
-					incrementPlanToolCount(conversationId, assistantMessage.id, currentPlanId);
+					if(currentPlanId) {
+						// Plan 的工具计数 +1
+						incrementPlanToolCount(conversationId, assistantMessage.id, currentPlanId);
+					}
 				}
 
 				// 计划完成事件

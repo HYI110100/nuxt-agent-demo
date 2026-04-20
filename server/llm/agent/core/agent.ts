@@ -48,12 +48,22 @@ class Agent {
         this.config.onLoopEvent?.({ type: 'input', content: input });
 
         const planResult = await this.planningNode.run({ historyMessages: (await this.config.getHistoryMessages?.() || []) });
-        console.log("=========================planResult==============================");
-        console.log('');
-        console.log(planResult);
-        console.log('');
         if (planResult.type === 'response') {
             this.config.onLoopEvent?.({ type: 'response', content: planResult.content, reasoning_content: planResult.reasoning_content });
+            return
+        }
+        if (planResult.type === 'tool_call') {
+            const thinkResult = await this.orchestrator.thinkActObserver({ name: planResult.name, params: planResult.params }, planResult.content);
+            if (thinkResult.type === 'error') {
+                throw new Error(thinkResult.message);
+            }
+            if (thinkResult.type === 'response') {
+                const finalThinkResult = await this.thinkNode.generateFinalResponse([{ role: 'assistant', content: `-[意图]${planResult.intention}\n-[行动]${planResult.content}\n -[结果]${thinkResult.content}` }]);
+                if (finalThinkResult.type === 'error') {
+                    throw new Error(finalThinkResult.message);
+                }
+                this.config.onLoopEvent?.({ type: 'result', content: finalThinkResult.content, reasoning_content: finalThinkResult.reasoning_content });
+            }
             return
         }
 
@@ -63,7 +73,7 @@ class Agent {
             // 使用本地历史消息，支持多 plan 之间的状态传递
             let localHistory: ChatMessage[] = [{
                 role: 'assistant',
-                content: `-[意图]${planResult.intention}\n-[行动]${planResult.content}\n -[计划]${plans.join('\n')}`,
+                content: `-[意图]${planResult.intention}\n-[行动]${planResult.content}\n -[结果]${plans.join('\n')}`,
             }];
 
             for (const plan of plans) {
@@ -74,9 +84,7 @@ class Agent {
                     planDescription: plan.description,
                     mode: plan.mode || 'serial',
                 });
-
                 const executionResult = await this.orchestrator.run(plan);
-
                 // 每个工具执行结果事件
                 for (let i = 0; i < executionResult.toolResults.length; i++) {
                     const toolResult = executionResult.toolResults[i];
@@ -107,23 +115,13 @@ class Agent {
                     toolResults: executionResult.toolResults,
                 });
             }
-            console.log("=========================localHistory==============================");
-            console.log('');
-            console.log(localHistory);
-            console.log('');
-
-
 
             const finalThinkResult = await this.thinkNode.generateFinalResponse(localHistory);
-            console.log("=========================finalThinkResult==============================");
-            console.log('');
-            console.log(finalThinkResult);
-            console.log('');
-            if (finalThinkResult.type === 'response') {
-                this.config.onLoopEvent?.({ type: 'result', content: finalThinkResult.content, reasoning_content: finalThinkResult.reasoning_content });
-            }
             if (finalThinkResult.type === 'error') {
                 throw new Error(finalThinkResult.message);
+            }
+            if (finalThinkResult.type === 'response') {
+                this.config.onLoopEvent?.({ type: 'result', content: finalThinkResult.content, reasoning_content: finalThinkResult.reasoning_content });
             }
             return
 

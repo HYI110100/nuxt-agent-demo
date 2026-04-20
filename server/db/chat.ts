@@ -20,11 +20,12 @@ export interface PlanDB {
     toolCount: number;
     createdAt: number;
     completedAt?: number;
+    step: number;
 }
 
 export interface ToolCallDB {
     id: string;
-    planId: string;
+    planId?: string;
     step: number;
     index: number;
     name: string;

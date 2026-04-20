@@ -15,11 +15,17 @@ export interface PlanToolType {
     reasoning_content: string;
     plans: PlanType[];
 }
+export interface OneToolType extends ToolCallType {
+    type: "tool_call";
+    intention: string;
+    content: string;
+    reasoning_content: string;
+}
 /**
  * 计划工具接口
  * 定义了计划工具的结构，包括执行模式、描述、步骤和工具列表
 */
-export type PlanCall = ResponseType | PlanToolType | ErrorType;
+export type PlanCall = ResponseType | OneToolType | PlanToolType | ErrorType;
 
 class PlanningNode {
     private llm: LLMClient;
@@ -41,6 +47,10 @@ class PlanningNode {
             // 检查 plan 是否符合 ResponseType 类型
             if (result.type === "response" && typeof result.content === "string") {
                 return { ...result, reasoning_content: response.reasoning_content } as ResponseType;
+            }
+            // 检查 plan 是否符合 OneToolType 类型
+            if (result.type === "tool_call" && typeof result.content === "string") {
+                return { ...result, reasoning_content: response.reasoning_content } as OneToolType;
             }
 
             // 检查 plan 是否符合 PlanToolType 类型
@@ -79,7 +89,7 @@ class PlanningNode {
 ## 输出格式
 - 不需要计划制定：\`{ "type": "response", "content": "直接回复内容" }\`
 - 需要计划制定：\`{ "type": "plan", "content": "用第一人称、自然口语化的方式，描述你打算做什么。","intention": "用户意图" , "plans": [{ "mode": "serial/parallel", "description": "简短描述当前计划的目标", "step": "当前计划执行顺序，数字类型，从1开始递增", "tools": [{ "name": "工具名", "params": { "参数名": "参数值" } }] }] }\`
-
+- 不需要多工具调用：\`{ "type": "tool_call", , "content": "用第一人称、自然口语化的方式，描述你打算做什么。","intention": "用户意图" , "name": "工具名", "params": { "参数名": "参数值" } }\`
 ${toolsPrompt || ''}
 
 # 规则

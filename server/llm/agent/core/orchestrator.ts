@@ -92,10 +92,11 @@ class Orchestrator {
         const extraSystemPrompt = `## 工具：
 ${toolInfo ? this.toolManager.getToolsPrompt([toolInfo]) : ''}`
 
-        let maxIterations = 3;
+        let maxIterations = 6;
         let iterations = 0;
 
         while (iterations < maxIterations) {
+            iterations++;
             debug(`Think-Act 循环迭代 [${iterations}/${maxIterations}]`);
             // 思考：根据历史决定下一步
             const thinkResult = await this.thinkNode.decideNextAction(historyMessages, extraSystemPrompt);
@@ -135,7 +136,6 @@ ${toolInfo ? this.toolManager.getToolsPrompt([toolInfo]) : ''}`
                     role: 'user',
                     content: '执行出错，如果你不能继续执行，请回复：{"type": "respond", "content": "错误原因"}'
                 });
-                iterations++;
                 continue;
             }
 
@@ -145,8 +145,6 @@ ${toolInfo ? this.toolManager.getToolsPrompt([toolInfo]) : ''}`
                 role: 'assistant',
                 content: `执行成功：${JSON.stringify(result)}`
             });
-
-            iterations++;
         }
 
         return {

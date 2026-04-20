@@ -1,4 +1,5 @@
 import type { ChatMessage, ErrorType, ResponseType, LLMClient } from "../core/types";
+import { debug, info, warn } from "../utils/logger";
 
 interface ThinkToolCallType {
     type: "tool_call";
@@ -16,6 +17,7 @@ class ThinkNode {
     }
 
     async decideNextAction(historyMessages: ChatMessage[], extraSystemPrompt: string): Promise<ThinkResult> {
+        debug("decideNextAction 接收消息数:", historyMessages.length);
         try {
             historyMessages.unshift({
                 role: 'system',
@@ -32,9 +34,12 @@ ${extraSystemPrompt}
 `,
             })
             const response = await this.llm.chat({ messages: historyMessages, response_format:{ type: "json_object" } });
+            debug("LLM 响应内容摘要:", response.content.substring(0, 100));
             const parsed = JSON.parse(response.content);
+            debug("decideNextAction 解析后的结果:", parsed.type);
 
             if (parsed.type === 'respond' && typeof parsed.content === 'string') {
+                info("decideNextAction 决定回复:", parsed.content.substring(0, 50));
                 return {
                     type: "response",
                     content: parsed.content,
@@ -43,6 +48,7 @@ ${extraSystemPrompt}
             }
 
             if (parsed.type === 'tool_call' && typeof parsed.tool === 'string') {
+                debug("decideNextAction 决定调用工具:", parsed.tool);
                 return {
                     type: "tool_call",
                     tool: parsed.tool,
@@ -58,6 +64,7 @@ ${extraSystemPrompt}
             };
 
         } catch (error: any) {
+            warn("decideNextAction LLM 调用或解析失败:", error.message || String(error));
             return {
                 type: "error",
                 message: error.message || String(error),
@@ -66,6 +73,7 @@ ${extraSystemPrompt}
         }
     }
     async generateFinalResponse(historyMessages: ChatMessage[]): Promise<FinalResult> {
+        debug("generateFinalResponse 开始，历史消息数:", historyMessages.length);
         try {
             historyMessages.unshift({
                 role: 'system',
@@ -86,9 +94,12 @@ ${extraSystemPrompt}
 `,
             })
             const response = await this.llm.chat({ messages: historyMessages, response_format:{ type: "json_object" } });
+            debug("LLM 生成最终回复响应摘要:", response.content.substring(0, 100));
             const parsed = JSON.parse(response.content);
+            debug("generateFinalResponse 解析后的结果:", parsed.type);
 
             if (parsed.type === 'respond' && typeof parsed.content === 'string') {
+                info("generateFinalResponse 完成:", parsed.content.substring(0, 50));
                 return {
                     type: "response",
                     content: parsed.content,
@@ -104,6 +115,7 @@ ${extraSystemPrompt}
             };
 
         } catch (error: any) {
+            warn("generateFinalResponse LLM 调用或解析失败:", error.message || String(error));
             return {
                 type: "error",
                 message: error.message || String(error),

@@ -1,5 +1,7 @@
 export type ToolCallType = { name: string; params?: Record<string, any> };
 
+import { debug, warn, error } from "../utils/logger";
+
 export type ToolSchemaType = "string" | "number" | "boolean" | "object" | "array";
 /**
  * 工具参数接口
@@ -33,9 +35,10 @@ class ToolManager {
     
     /** 注册工具 */
     add(tool: BaseTool): BaseTool {
+        debug("注册新工具:", tool.name);
         const existing = this.tools.get(tool.name);
         if (existing) {
-            console.warn(`Tool "${tool.name}" already registered, overriding`);
+            warn(`工具 "${tool.name}" 已存在，正在覆盖`);
         }
         // 创建新对象但保留 execute 方法的引用
         const newTool = Object.assign(Object.create(Object.getPrototypeOf(tool)), tool);
@@ -111,8 +114,10 @@ ${toolListDescription}
 
     /** 运行工具 */
     async run(toolName: string, params?: Record<string, any>): Promise<any> {
+        debug("ToolManager.run 请求执行工具:", { name: toolName, params: JSON.stringify(params).substring(0, 100) });
         const tool = this.tools.get(toolName);
         if (!tool) {
+            error(`Tool "${toolName}" not found`);
             throw new Error(`Tool "${toolName}" not found`);
         }
         const result: Record<string, any> = {};
@@ -124,6 +129,7 @@ ${toolListDescription}
 
             // 检查必填字段
             if (param.required && value === undefined && !('default' in param)) {
+                warn(`参数验证失败：缺少必填参数 ${param.name}`);
                 errors.push(`Missing required parameter: ${param.name}`);
                 continue;
             }
@@ -132,6 +138,7 @@ ${toolListDescription}
             if (value === undefined) {
                 if ('default' in param) {
                     result[param.name] = param.default;
+                    debug(`使用默认值：${param.name} = ${JSON.stringify(param.default)}`);
                 }
                 continue;
             }
@@ -139,6 +146,7 @@ ${toolListDescription}
             // 类型验证和转换
             const convertedValue = convertType(value, param.type);
             if (convertedValue === null) {
+                warn(`参数验证失败：${param.name} 类型错误，期望 ${param.type}`);
                 errors.push(`Invalid type for ${param.name}: expected ${param.type}`);
                 continue;
             }
@@ -147,6 +155,7 @@ ${toolListDescription}
             if (param.optional && param.optional.length > 0) {
                 const validValues = param.optional.map(o => o.value);
                 if (!validValues.includes(convertedValue)) {
+                    warn(`参数验证失败：${param.name} 值无效，必须是 [${validValues.join(', ')}] 之一`);
                     errors.push(
                         `${param.name} must be one of: ${validValues.join(', ')}`
                     );
@@ -159,9 +168,14 @@ ${toolListDescription}
 
         // 抛出所有验证错误
         if (errors.length > 0) {
-            throw new Error(`Parameter validation failed: ${errors.join('; ')}`);
+            const errorMsg = `Parameter validation failed: ${errors.join('; ')}`;
+            error(errorMsg);
+            throw new Error(errorMsg);
         }
-        return await tool.execute(result);
+        debug("参数验证通过，执行工具:", toolName);
+        const executeResult = await tool.execute(result);
+        debug("工具执行完成:", { tool: toolName, resultSummary: String(executeResult).substring(0, 100) });
+        return executeResult;
     }
 }
 export default ToolManager;

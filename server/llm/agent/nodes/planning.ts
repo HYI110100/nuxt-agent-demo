@@ -1,4 +1,5 @@
 import type { LLMClient, ChatMessage, ErrorType, ResponseType } from "../core/types";
+import { debug, warn } from "../utils/logger";
 import type { ToolCallType } from "./toolManager";
 
 export interface PlanType {
@@ -40,9 +41,12 @@ class PlanningNode {
  * @returns {Promise<Object>} 计划对象
  */
     async run({ historyMessages }: { historyMessages: ChatMessage[] }): Promise<PlanCall> {
+        debug("PlanningNode.run 接收消息数:", historyMessages.length);
         try {
             const response = await this.llm.chat({ messages: historyMessages, response_format:{ type: "json_object" } });
+            debug("LLM planning 响应摘要:", response.content.substring(0, 100));
             const result = JSON.parse(response.content);
+            debug("PlanningNode 解析结果类型:", result.type);
 
             // 检查 plan 是否符合 ResponseType 类型
             if (result.type === "response" && typeof result.content === "string") {
@@ -58,20 +62,23 @@ class PlanningNode {
                 // 验证每个 plan 是否符合 PlanType 类型
                 for (const p of result.plans) {
                     if (!isValidPlan(p)) {
-                        console.warn("plan-计划格式无效:", p);
+                        warn("plan-计划格式无效:", p);
                         return { type: "error", message: "计划格式无效", code: "invalid_plan_format" };
                     }
                 }
+                debug("PlanningNode 生成多步骤计划:", { planCount: result.plans.length });
                 return { ...result, reasoning_content: response.reasoning_content } as PlanToolType;
             }
 
             // 检查 plan 是否符合 PlanType 类型
             if (isValidPlan(result)) {
+                debug("PlanningNode 生成单步计划");
                 return { type: "plan", content: "我现在需要计划制定", reasoning_content: response.reasoning_content, plans: [result] } as PlanToolType;
             }
             // 其他类型直接回复,进行兜底处理
             return { type: "response", content: result.toString() || '', reasoning_content: response.reasoning_content };
         } catch (error: any) {
+            warn("PlanningNode 执行失败:", error.message || String(error));
             return { type: "error", message: error, code: "planning_error" };
         }
     }

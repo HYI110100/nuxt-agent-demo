@@ -93,7 +93,7 @@ export default defineEventHandler(async (event: H3Event) => {
 						assistantMessage.id,
 						currentPlanId || '',
 						toolCallId,
-						typeof e.result === 'string' ? JSON.parse(e.result) : e.result,
+						e.result,
 						e.status
 					);
 

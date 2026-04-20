@@ -53,6 +53,7 @@ class Agent {
             return
         }
         if (planResult.type === 'tool_call') {
+            this.config.onLoopEvent?.({ type: 'response', content: planResult.content, reasoning_content: planResult.reasoning_content });
             const thinkResult = await this.orchestrator.thinkActObserver({ name: planResult.name, params: planResult.params }, planResult.content);
             if (thinkResult.type === 'error') {
                 throw new Error(thinkResult.message);
@@ -85,9 +86,9 @@ class Agent {
                     mode: plan.mode || 'serial',
                 });
                 const executionResult = await this.orchestrator.run(plan);
+
                 // 每个工具执行结果事件
-                for (let i = 0; i < executionResult.toolResults.length; i++) {
-                    const toolResult = executionResult.toolResults[i];
+                for (const toolResult of executionResult.toolResults) {
                     this.config.onLoopEvent?.({
                         type: 'tool_result',
                         step: plan.step,
@@ -115,7 +116,6 @@ class Agent {
                     toolResults: executionResult.toolResults,
                 });
             }
-
             const finalThinkResult = await this.thinkNode.generateFinalResponse(localHistory);
             if (finalThinkResult.type === 'error') {
                 throw new Error(finalThinkResult.message);

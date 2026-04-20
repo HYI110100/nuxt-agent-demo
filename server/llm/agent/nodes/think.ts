@@ -31,7 +31,7 @@ class ThinkNode {
 ${extraSystemPrompt}
 `,
             })
-            const response = await this.llm.chat(historyMessages);
+            const response = await this.llm.chat({ messages: historyMessages, response_format:{ type: "json_object" } });
             const parsed = JSON.parse(response.content);
 
             if (parsed.type === 'respond' && typeof parsed.content === 'string') {
@@ -85,7 +85,7 @@ ${extraSystemPrompt}
 - 禁止输出非 JSON对象 格式的文本。{"type": "respond", "content": "最终总结"}
 `,
             })
-            const response = await this.llm.chat(historyMessages);
+            const response = await this.llm.chat({ messages: historyMessages, response_format:{ type: "json_object" } });
             const parsed = JSON.parse(response.content);
 
             if (parsed.type === 'respond' && typeof parsed.content === 'string') {

@@ -20,7 +20,10 @@ console.log(`当前日志级别: ${currentLevel}`);
 const levelValue = LOG_LEVELS[currentLevel as keyof typeof LOG_LEVELS] ?? LOG_LEVELS.INFO;
 
 function shouldLog(level: number): boolean {
-    return level <= levelValue;
+    if (level === LOG_LEVELS.OFF) {
+        return false;
+    }
+    return level >= levelValue;
 }
 
 export function debug(...args: any[]): void {

@@ -19,7 +19,7 @@ export default defineEventHandler(async (event: H3Event) => {
 		}
 
 		if (!chatsDB.has(chatId)) {
-			chatsDB.set(chatId, { id: chatId, title: '新对话' });
+			throw new Error(`对话 ${chatId} 不存在`);
 		}
 
 		const body = await readBody(event);
@@ -128,7 +128,7 @@ export default defineEventHandler(async (event: H3Event) => {
 			},
 		});
 
-		if (!(messagesDB.get(chatId)?.length)) {
+		if (!messagesDB.get(chatId)?.find(msg => msg.role === 'system')) {
 			addSystemMessage(chatId, agent.getSystemPrompt());
 		}
 

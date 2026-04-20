@@ -4,6 +4,7 @@
  */
 
 const LOG_LEVELS = {
+    OFF: -1,
     DEBUG: 0,
     INFO: 1,
     WARN: 2,
@@ -14,6 +15,8 @@ type LogLevel = keyof typeof LOG_LEVELS;
 
 // 默认级别为 INFO
 const currentLevel = (process.env.AGENT_LOG_LEVEL as LogLevel) || "INFO";
+console.log(`当前日志级别: ${currentLevel}`);
+
 const levelValue = LOG_LEVELS[currentLevel as keyof typeof LOG_LEVELS] ?? LOG_LEVELS.INFO;
 
 function shouldLog(level: number): boolean {

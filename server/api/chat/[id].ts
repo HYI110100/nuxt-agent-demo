@@ -37,7 +37,8 @@ export default defineEventHandler(async (event: H3Event) => {
 		if (!messagesDB.has(conversationId)) {
 			messagesDB.set(conversationId, []);
 		}
-
+		// 1. 添加用户输入消息
+		addUserMessage(conversationId, input);
 		// 2. 创建空的 assistant 消息
 		let assistantMessage = createAssistantMessage(conversationId);
 
@@ -51,7 +52,7 @@ export default defineEventHandler(async (event: H3Event) => {
 			getHistoryMessages: async () => messageToOpenaiMessage(messagesDB.get(conversationId) || []),
 			onLoopEvent: (e) => {
 				if (e.type === 'input') {
-					addUserMessage(conversationId, input);
+					// 用户输入事件
 				}
 				if (!(messagesDB.get(chatId)?.find(msg => msg.role === 'assistant' && msg.id === assistantMessage.id))) {
 					messagesDB.get(conversationId)!.push(assistantMessage);

@@ -95,7 +95,7 @@
             <!-- Tool Calls & Results Combined -->
             <div class="mt-3 space-y-2">
               <div v-for="(tc, idx) in getToolCallsForPlan(plan.id)" :key="tc.id" class="bg-gray-50 rounded p-2 text-xs">
-                <div class="font-medium text-gray-700 mb-1">🔧 {{ tc.name }} ({{ plan.mode === "parallel" ? "#" : "顺序：" }}{{ plan.mode === "parallel" ? idx + 1 : tc.step + 1 }})</div>
+                <div class="font-medium text-gray-700 mb-1">🔧 {{ tc.name }} ({{ plan.mode === "parallel" ? "#" : "顺序：" }}{{ plan.mode === "parallel" ? "∞" : tc.step + 1 }})</div>
                 <div class="text-gray-500 mb-1">参数：{{ JSON.stringify(tc.params) }}</div>
 
                 <!-- Find matching result by index for parallel, by step for serial -->

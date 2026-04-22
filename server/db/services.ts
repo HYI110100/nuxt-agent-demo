@@ -100,10 +100,10 @@ export function createAssistantMessage(conversationId: string): MessageAssistant
         },
     };
 
-    // if (!messagesDB.has(conversationId)) {
-    //     messagesDB.set(conversationId, []);
-    // }
-    // messagesDB.get(conversationId)!.push(message);
+    if (!messagesDB.has(conversationId)) {
+        messagesDB.set(conversationId, []);
+    }
+    messagesDB.get(conversationId)!.push(message);
 
     return message;
 }

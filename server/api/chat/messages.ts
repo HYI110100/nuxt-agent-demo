@@ -20,5 +20,5 @@ export default defineEventHandler(async (event: H3Event) => {
 	}
 
 	const messages = messagesDB.get(chatId) || [];
-	return messages.sort((a, b) => b.timestamp - a.timestamp);
+	return messages.sort((a, b) => a.timestamp - b.timestamp);
 });
